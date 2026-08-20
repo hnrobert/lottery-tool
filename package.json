@@ -1,0 +1,26 @@
+{
+  "name": "lottery-tool",
+  "private": true,
+  "version": "1.0.0",
+  "description": "抽奖工具 monorepo",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:web": "pnpm --filter @lottery-tool/web dev",
+    "dev:service": "pnpm --filter @lottery-tool/service dev",
+    "build": "pnpm --filter @lottery-tool/web build",
+    "start:service": "pnpm --filter @lottery-tool/service start",
+    "lint": "pnpm --filter @lottery-tool/web lint",
+    "test": "pnpm --filter @lottery-tool/service test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.13.1+sha512.37ebf1a5c7a30d5fabe0c5df44ee8da4c965ca0c5af3dbab28c3a1681b70a256218d05c81c9c0dcf767ef6b8551eb5b960042b9ed4300c59242336377e01cfad",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver",
+      "vue-demi"
+    ]
+  }
+}
