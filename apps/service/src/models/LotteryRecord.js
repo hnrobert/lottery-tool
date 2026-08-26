@@ -60,6 +60,31 @@ const LotteryRecord = sequelize.define('LotteryRecord', {
     allowNull: true,
     field: 'user_agent'
   },
+  signature_key: {
+    type: DataTypes.STRING(512),
+    allowNull: true,
+    field: 'signature_key',
+    comment: '签字图片在COS中的对象键'
+  },
+  signature_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'signature_url',
+    comment: '签字图片访问URL（预签名或公开URL）'
+  },
+  signed_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'signed_at',
+    comment: '签字时间'
+  },
+  signature_status: {
+    type: DataTypes.ENUM('unsigned', 'signed'),
+    allowNull: false,
+    defaultValue: 'unsigned',
+    field: 'signature_status',
+    comment: '签字状态'
+  },
   created_at: {
     type: DataTypes.DATE,
     allowNull: false,
@@ -102,6 +127,23 @@ LotteryRecord.createRecord = async function(data, options = {}) {
     ip_address,
     user_agent
   }, { transaction: options.transaction });
+};
+
+// 类方法：更新签字信息
+LotteryRecord.updateSignature = async function(recordId, signatureData, options = {}) {
+  const record = await this.findByPk(recordId, { transaction: options.transaction });
+  if (!record) {
+    return null;
+  }
+
+  await record.update({
+    signature_key: signatureData.signature_key,
+    signature_url: signatureData.signature_url,
+    signed_at: signatureData.signed_at || new Date(),
+    signature_status: 'signed',
+  }, { transaction: options.transaction });
+
+  return record;
 };
 
 // 类方法：获取活动的抽奖记录

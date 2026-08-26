@@ -162,6 +162,15 @@
       </DialogContent>
     </Dialog>
     
+    <!-- 签字弹窗 -->
+    <SignatureDialog
+      v-model:visible="showSignature"
+      :is-submitting="isSubmittingSignature"
+      :error-message="signatureError"
+      @confirm="handleSignatureConfirm"
+      @cancel="handleSignatureCancel"
+    />
+    
     <!-- Toast 组件 -->
     <Toaster />
   </div>
@@ -177,6 +186,7 @@ import { toast, Toaster } from 'vue-sonner';
 import { lotteryApi, adminActivityApi, authApi } from '@/api';
 import { useUserStore } from '@/stores/user';
 import type { Activity, Prize, LotteryRecord } from '@/types/api';
+import SignatureDialog from '@/components/common/SignatureDialog.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -200,6 +210,12 @@ const lotteryResult = ref<{
     participant_info?: { name: string; phone: string; email?: string } 
   } | null;
 } | null>(null);
+
+// 签字相关
+const showSignature = ref(false);
+const isSubmittingSignature = ref(false);
+const signatureError = ref('');
+const currentRecordId = ref<number | null>(null);
 
 // 参与者信息（仅online模式需要）
 const participantInfo = ref({
@@ -391,14 +407,28 @@ const handleDraw = async () => {
     };
     
     showResult.value = true;
-    
-    // 5秒后自动关闭Dialog
-    setTimeout(() => {
-      if (showResult.value) {
-        closeResult();
-      }
-    }, 5000);
-    
+
+    // 线下抽奖且活动开启了签字功能时，弹出签字弹窗
+    const isOffline = activityInfo.value?.lottery_mode === 'offline';
+    const requireSignature = activityInfo.value?.settings?.require_signature === true;
+    const recordId = drawResponse.lottery_record?.id;
+
+    if (isOffline && requireSignature && recordId) {
+      currentRecordId.value = recordId;
+      // 延迟一下再弹出签字，让用户先看到抽奖结果
+      setTimeout(() => {
+        showResult.value = false;
+        showSignature.value = true;
+      }, 1500);
+    } else {
+      // 不需要签字时，5秒后自动关闭结果弹窗
+      setTimeout(() => {
+        if (showResult.value) {
+          closeResult();
+        }
+      }, 5000);
+    }
+
     // 显示抽奖结果提示
     if (lotteryResult.value?.is_winner && lotteryResult.value?.prize) {
       toast.success(`🎉 恭喜您抽中了：${lotteryResult.value.prize.name}！`);
@@ -440,6 +470,42 @@ const handleDraw = async () => {
 const closeResult = () => {
   showResult.value = false;
   lotteryResult.value = null;
+};
+
+// 签字确认
+const handleSignatureConfirm = async (dataUrl: string) => {
+  if (!currentRecordId.value || !activityId) return;
+
+  isSubmittingSignature.value = true;
+  signatureError.value = '';
+
+  try {
+    await adminActivityApi.uploadSignature(activityId, currentRecordId.value, {
+      image: dataUrl,
+    });
+    toast.success('签字提交成功');
+    showSignature.value = false;
+    currentRecordId.value = null;
+    lotteryResult.value = null;
+  } catch (err) {
+    let errorMessage = '签字上传失败，请重试';
+    if (err && typeof err === 'object' && 'message' in err) {
+      errorMessage = (err as { message: string }).message;
+    }
+    signatureError.value = errorMessage;
+    toast.error(errorMessage);
+  } finally {
+    isSubmittingSignature.value = false;
+  }
+};
+
+// 签字取消
+const handleSignatureCancel = () => {
+  showSignature.value = false;
+  signatureError.value = '';
+  currentRecordId.value = null;
+  lotteryResult.value = null;
+  toast.info('已取消签字，抽奖结果已保存');
 };
 
 // 组件挂载时加载数据

@@ -67,6 +67,9 @@ uploads/
 *.sqlite3
 *.db
 
+# System config (contains COS secrets)
+apps/service/config/system.json
+
 # Misc
 tmp/
 temp/

@@ -1,0 +1,22 @@
+{
+  "installed": false,
+  "installTime": null,
+  "version": "1.0.0",
+  "database": {
+    "host": "localhost",
+    "port": "3306",
+    "name": "lottery_system"
+  },
+  "superAdmin": {
+    "username": "admin",
+    "email": "admin@example.com"
+  },
+  "cos": {
+    "secret_id": "",
+    "secret_key": "",
+    "bucket": "",
+    "region": "",
+    "custom_domain": "",
+    "path_prefix": ""
+  }
+}

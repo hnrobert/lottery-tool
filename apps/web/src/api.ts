@@ -24,6 +24,10 @@ import type {
   LotteryRecordListParams,
   Pagination,
   DrawLotteryResponse,
+  CosConfig,
+  CosConfigResponse,
+  UploadSignatureRequest,
+  UploadSignatureResponse,
 } from './types/api';
 
 // API 基础配置
@@ -237,6 +241,26 @@ export const systemApi = {
       method: 'DELETE',
     });
   },
+
+  // 获取COS配置
+  async getCosConfig(): Promise<CosConfigResponse> {
+    return apiFetch('/system/cos-config');
+  },
+
+  // 更新COS配置
+  async updateCosConfig(data: Partial<CosConfig>): Promise<CosConfigResponse> {
+    return apiFetch('/system/cos-config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // 测试COS连接
+  async testCosConfig(): Promise<{ success: boolean; bucket_exists: boolean; bucket_count: number }> {
+    return apiFetch('/system/cos-config/test', {
+      method: 'POST',
+    });
+  },
 };
 
 // 管理员模块 - 活动管理 API
@@ -338,6 +362,14 @@ export const adminActivityApi = {
   // 线下抽奖
   async offlineDraw(id: number, data: { lottery_code: string; prize_id?: number }): Promise<DrawLotteryResponse> {
     return apiFetch(`/lottery/activities/${id}/offline-draw`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // 上传签字
+  async uploadSignature(activityId: number, recordId: number, data: UploadSignatureRequest): Promise<UploadSignatureResponse> {
+    return apiFetch(`/lottery/activities/${activityId}/records/${recordId}/signature`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

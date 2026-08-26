@@ -22,6 +22,7 @@ export interface Activity {
     max_lottery_codes?: number;
     lottery_code_format?: '4_digit_number' | '8_digit_number' | '8_digit_alphanumeric' | '12_digit_number' | '12_digit_alphanumeric';
     allow_duplicate_phone?: boolean;
+    require_signature?: boolean;
   };
   created_at: string;
   lottery_codes_count?: number;
@@ -62,6 +63,10 @@ export interface LotteryRecord {
   operator_id?: number;
   ip_address?: string;
   user_agent?: string;
+  signature_key?: string;
+  signature_url?: string;
+  signed_at?: string;
+  signature_status?: 'unsigned' | 'signed';
   created_at: string;
   lotteryCode: string;
   phone?: string;
@@ -136,6 +141,7 @@ export interface CreateActivityRequest {
     max_lottery_codes?: number;
     lottery_code_format?: '4_digit_number' | '8_digit_number' | '8_digit_alphanumeric' | '12_digit_number' | '12_digit_alphanumeric';
     allow_duplicate_phone?: boolean;
+    require_signature?: boolean;
   };
 }
 
@@ -228,6 +234,32 @@ export interface DrawLotteryResponse {
   prize?: Prize;
   lottery_record: LotteryRecord;
   lottery_code: LotteryCode;
+}
+
+// COS 配置类型
+export interface CosConfig {
+  secret_id: string;
+  secret_key: string;
+  bucket: string;
+  region: string;
+  custom_domain?: string;
+  path_prefix?: string;
+}
+
+export interface CosConfigResponse {
+  configured: boolean;
+  config: CosConfig;
+}
+
+export interface UploadSignatureRequest {
+  image: string;
+}
+
+export interface UploadSignatureResponse {
+  record_id: number;
+  signature_key: string;
+  signature_url: string;
+  signed_at: string;
 }
 
 // i18n 相关类型

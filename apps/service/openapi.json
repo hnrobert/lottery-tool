@@ -2238,6 +2238,24 @@
                                   "operator": {
                                     "type": "string",
                                     "description": "操作员用户名"
+                                  },
+                                  "signature_key": {
+                                    "type": "string",
+                                    "description": "签字图片COS对象键"
+                                  },
+                                  "signature_url": {
+                                    "type": "string",
+                                    "description": "签字图片访问URL"
+                                  },
+                                  "signed_at": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "description": "签字时间"
+                                  },
+                                  "signature_status": {
+                                    "type": "string",
+                                    "enum": ["unsigned", "signed"],
+                                    "description": "签字状态"
                                   }
                                 }
                               }
@@ -2544,6 +2562,111 @@
                                   }
                                 }
                               }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/lottery/activities/{id}/records/{recordId}/signature": {
+      "post": {
+        "tags": ["抽奖模块"],
+        "summary": "上传签字图片",
+        "description": "线下抽奖完成后，上传参与者签字图片到COS并更新记录。仅线下抽奖记录支持签字。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "活动ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "description": "抽奖记录ID",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "description": "签字图片的base64编码（PNG格式）",
+                    "maxLength": 3000000
+                  }
+                },
+                "required": ["image"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "签字上传成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "record_id": {
+                              "type": "integer",
+                              "description": "抽奖记录ID"
+                            },
+                            "signature_key": {
+                              "type": "string",
+                              "description": "COS对象键"
+                            },
+                            "signature_url": {
+                              "type": "string",
+                              "description": "签字图片访问URL"
+                            },
+                            "signed_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "description": "签字时间"
                             }
                           }
                         }
@@ -3198,6 +3321,231 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      }
+    },
+    "/system/cos-config": {
+      "get": {
+        "tags": ["系统管理模块"],
+        "summary": "获取COS配置",
+        "description": "获取腾讯云COS配置信息，SecretKey会脱敏返回。仅超级管理员可访问。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "configured": {
+                              "type": "boolean",
+                              "description": "COS是否已配置"
+                            },
+                            "config": {
+                              "type": "object",
+                              "properties": {
+                                "secret_id": {
+                                  "type": "string",
+                                  "description": "SecretId"
+                                },
+                                "secret_key": {
+                                  "type": "string",
+                                  "description": "SecretKey（脱敏，显示为********）"
+                                },
+                                "bucket": {
+                                  "type": "string",
+                                  "description": "存储桶名称（格式：bucketname-appid）"
+                                },
+                                "region": {
+                                  "type": "string",
+                                  "description": "地域，例如 ap-guangzhou"
+                                },
+                                "custom_domain": {
+                                  "type": "string",
+                                  "description": "自定义域名（可选）"
+                                },
+                                "path_prefix": {
+                                  "type": "string",
+                                  "description": "对象前缀（可选）"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      },
+      "put": {
+        "tags": ["系统管理模块"],
+        "summary": "更新COS配置",
+        "description": "更新腾讯云COS配置。SecretKey留空表示不修改。仅超级管理员可访问。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "secret_id": {
+                    "type": "string",
+                    "description": "SecretId"
+                  },
+                  "secret_key": {
+                    "type": "string",
+                    "description": "SecretKey（留空表示不修改）"
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "description": "存储桶名称（格式：bucketname-appid）"
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "地域，例如 ap-guangzhou"
+                  },
+                  "custom_domain": {
+                    "type": "string",
+                    "description": "自定义域名（可选）"
+                  },
+                  "path_prefix": {
+                    "type": "string",
+                    "description": "对象前缀（可选）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "configured": {
+                              "type": "boolean",
+                              "description": "COS是否已配置"
+                            },
+                            "config": {
+                              "type": "object",
+                              "description": "更新后的配置（SecretKey脱敏）"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      }
+    },
+    "/system/cos-config/test": {
+      "post": {
+        "tags": ["系统管理模块"],
+        "summary": "测试COS连接",
+        "description": "测试COS配置是否正确，能否正常连接。仅超级管理员可访问。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "测试成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "success": {
+                              "type": "boolean",
+                              "description": "是否连接成功"
+                            },
+                            "bucket_exists": {
+                              "type": "boolean",
+                              "description": "配置的存储桶是否存在"
+                            },
+                            "bucket_count": {
+                              "type": "integer",
+                              "description": "账号下存储桶总数"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
