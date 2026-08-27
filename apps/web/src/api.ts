@@ -247,21 +247,7 @@ export const systemApi = {
     return apiFetch('/system/cos-config');
   },
 
-  // 更新COS配置
-  async updateCosConfig(data: Partial<CosConfig>): Promise<CosConfigResponse> {
-    return apiFetch('/system/cos-config', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // 测试COS连接
-  async testCosConfig(): Promise<{ success: boolean; bucket_exists: boolean; bucket_count: number }> {
-    return apiFetch('/system/cos-config/test', {
-      method: 'POST',
-    });
-  },
-};
+  };
 
 // 管理员模块 - 活动管理 API
 export const adminActivityApi = {

@@ -1,4 +1,4 @@
-﻿{
+{
   "installed": false,
   "installTime": null,
   "version": "1.0.0",
@@ -10,14 +10,5 @@
   "superAdmin": {
     "username": "admin",
     "email": "admin@example.com"
-  },
-  "cos": {
-    "_comment": "COS配置优先使用环境变量（.env中的COS_*变量），此处配置仅在环境变量未设置时生效。推荐使用环境变量管理敏感配置。",
-    "secret_id": "",
-    "secret_key": "",
-    "bucket": "",
-    "region": "",
-    "custom_domain": "",
-    "path_prefix": ""
   }
 }

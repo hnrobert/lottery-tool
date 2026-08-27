@@ -7,7 +7,7 @@ const { logOperation } = require('../middleware/operationLogger');
 const bcrypt = require('bcryptjs');
 const moment = require('moment');
 const { authenticateToken, requireAdmin, requireSuperAdmin } = require('../middleware/auth');
-const { getMaskedCosConfig, updateCosConfig, isCosConfigured, isCosConfigFromEnv } = require('../utils/systemConfig');
+const { getMaskedCosConfig, isCosConfigured } = require('../utils/systemConfig');
 const cosClient = require('../utils/cosClient');
 
 // 所有system路由都需要认证和管理员权限
@@ -644,9 +644,9 @@ router.get('/config', async (req, res, next) => {
   }
 });
 
-// ==================== COS 配置（超级管理员） ====================
-
-// 获取COS配置（SecretKey脱敏）
+// ==================== COS 配置（只读，仅环境变量） ====================
+// COS 配置仅通过服务端环境变量（.env）设置，不支持通过 API 修改
+// 密钥只放服务端，推荐使用子账号最小权限
 router.get('/cos-config', [
   authenticateToken,
   requireSuperAdmin,
@@ -665,88 +665,12 @@ router.get('/cos-config', [
           custom_domain: '',
           path_prefix: '',
         },
+        note: 'COS 配置仅通过服务端环境变量（.env）设置，不支持通过此接口修改。请设置 COS_SECRET_ID、COS_SECRET_KEY、COS_BUCKET、COS_REGION 等环境变量后重启服务。',
       },
     });
   } catch (error) {
-    next(error);
-  }
-});
-
-// 更新COS配置
-router.put('/cos-config', [
-  authenticateToken,
-  requireSuperAdmin,
-  body('secret_id').optional().isString().withMessage('SecretId必须是字符串'),
-  body('secret_key').optional().isString().withMessage('SecretKey必须是字符串'),
-  body('bucket').optional().isString().withMessage('Bucket必须是字符串'),
-  body('region').optional().isString().withMessage('Region必须是字符串'),
-  body('custom_domain').optional().isString().withMessage('自定义域名必须是字符串'),
-  body('path_prefix').optional().isString().withMessage('对象前缀必须是字符串'),
-], async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: '参数验证失败',
-        errors: errors.array(),
-      });
-    }
-
-    const updates = {};
-    if (req.body.secret_id !== undefined) updates.secret_id = req.body.secret_id.trim();
-    if (req.body.secret_key !== undefined) updates.secret_key = req.body.secret_key.trim();
-    if (req.body.bucket !== undefined) updates.bucket = req.body.bucket.trim();
-    if (req.body.region !== undefined) updates.region = req.body.region.trim();
-    if (req.body.custom_domain !== undefined) updates.custom_domain = req.body.custom_domain.trim();
-    if (req.body.path_prefix !== undefined) updates.path_prefix = req.body.path_prefix.trim();
-
-    updateCosConfig(updates);
-
-    // 记录操作日志
-    logOperation(req.user.id, 'update_cos_config', {
-      updated_fields: Object.keys(updates).filter(k => k !== 'secret_key'),
-    });
-
-    const maskedConfig = getMaskedCosConfig();
-    res.json({
-      success: true,
-      data: {
-        configured: maskedConfig !== null,
-        config: maskedConfig,
-      },
-      message: 'COS配置更新成功',
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// 测试COS连接
-router.post('/cos-config/test', [
-  authenticateToken,
-  requireSuperAdmin,
-], async (req, res, next) => {
-  try {
-    if (!isCosConfigured()) {
-      return res.status(400).json({
-        success: false,
-        message: 'COS未配置，请先配置COS信息',
-      });
-    }
-
-    const result = await cosClient.testConnection();
-    res.json({
-      success: true,
-      data: result,
-      message: 'COS连接测试成功',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'COS连接测试失败',
-      error: error.message,
-    });
+    console.error('获取COS配置失败:', error);
+    res.status(500).json({ success: false, message: '获取COS配置失败' });
   }
 });
 
