@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const { body, query, param, validationResult } = require('express-validator');
 const { User, OperationLog, Activity, LotteryRecord } = require('../models');
@@ -7,7 +7,7 @@ const { logOperation } = require('../middleware/operationLogger');
 const bcrypt = require('bcryptjs');
 const moment = require('moment');
 const { authenticateToken, requireAdmin, requireSuperAdmin } = require('../middleware/auth');
-const { getMaskedCosConfig, updateCosConfig, isCosConfigured } = require('../utils/systemConfig');
+const { getMaskedCosConfig, updateCosConfig, isCosConfigured, isCosConfigFromEnv } = require('../utils/systemConfig');
 const cosClient = require('../utils/cosClient');
 
 // 所有system路由都需要认证和管理员权限

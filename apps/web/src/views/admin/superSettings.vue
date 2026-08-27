@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="space-y-6">
     <PageTitle title="超级管理员设置" subTitle="配置系统级参数，仅超级管理员可访问" />
 
@@ -9,6 +9,16 @@
         <p class="text-sm text-muted-foreground">
           配置后，线下抽奖的签字图片将上传至 COS 存储。密钥仅保存在服务端，不会下发到浏览器。
         </p>
+
+        <!-- 环境变量配置提示 -->
+        <div v-if="envConfigured" class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+          <p class="font-medium mb-1">当前 COS 配置来自环境变量（.env 中的 COS_* 变量）</p>
+          <p class="text-amber-700">环境变量优先级高于本页面配置。如需修改，请编辑服务端的 .env 文件并重启服务。本页面保存的配置仅在环境变量未设置时生效。</p>
+        </div>
+        <div v-else class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-sm">
+          <p class="font-medium mb-1">推荐使用环境变量配置 COS</p>
+          <p class="text-blue-700">敏感配置（如 SecretKey）推荐通过 .env 环境变量管理（COS_SECRET_ID、COS_SECRET_KEY、COS_BUCKET、COS_REGION 等），更安全且便于多环境部署。参考 apps/service/.env.example。</p>
+        </div>
       </div>
 
       <div class="p-6 space-y-4">
@@ -137,6 +147,7 @@ const form = ref<CosConfig>({
 const isSaving = ref(false);
 const isTesting = ref(false);
 const hasConfig = ref(false);
+const envConfigured = ref(false);
 const loadError = ref('');
 const testResult = ref<{ success: boolean; message: string } | null>(null);
 
@@ -144,6 +155,7 @@ const loadConfig = async () => {
   try {
     const response = await systemApi.getCosConfig();
     hasConfig.value = response.configured;
+    envConfigured.value = response.env_configured || false;
     if (response.config) {
       form.value.secret_id = response.config.secret_id || '';
       form.value.secret_key = ''; // 不回显密钥
@@ -191,6 +203,7 @@ const handleSave = async () => {
 
     const response = await systemApi.updateCosConfig(updateData);
     hasConfig.value = response.configured;
+    envConfigured.value = response.env_configured || false;
     form.value.secret_key = ''; // 清空密钥输入框
     toast.success('COS 配置保存成功');
   } catch (err) {
