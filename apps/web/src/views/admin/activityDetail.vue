@@ -66,6 +66,29 @@
         :empty-text="'暂无抽奖记录'"
       />
     </div>
+
+    <!-- 签字预览 Dialog -->
+    <Dialog :open="showSignaturePreview" @update:open="showSignaturePreview = $event">
+      <DialogContent class="max-w-2xl mx-4">
+        <DialogHeader>
+          <DialogTitle>签字预览</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4">
+          <div v-if="previewRecordInfo" class="text-sm text-gray-600 space-y-1">
+            <p><span class="font-medium">抽奖码：</span>{{ previewRecordInfo.code }}</p>
+            <p><span class="font-medium">参与者：</span>{{ previewRecordInfo.name }}</p>
+            <p><span class="font-medium">签字时间：</span>{{ previewRecordInfo.signedAt }}</p>
+          </div>
+          <div class="border rounded-lg p-4 bg-gray-50 flex justify-center">
+            <img
+              :src="previewSignatureUrl"
+              alt="签字图片"
+              class="max-w-full max-h-80 object-contain"
+            />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -78,7 +101,8 @@ import NumberCard from '@/components/admin/dashboard/numberCard.vue';
 import DataTable from '@/components/common/DataTable.vue';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Package, Gift, Search, Ticket } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Package, Gift, Search, Ticket, Eye } from 'lucide-vue-next';
 import { API } from '@/api';
 import type { Activity, Prize, LotteryRecord } from '@/types/api';
 import type { TableColumn } from '@/components/common/types';
@@ -95,6 +119,11 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const totalRecords = ref(0);
 const searchQuery = ref('');
+
+// 签字预览
+const showSignaturePreview = ref(false);
+const previewSignatureUrl = ref('');
+const previewRecordInfo = ref<{ code: string; name: string; signedAt: string } | null>(null);
 
 // 计算属性
 const prizeTypeCount = computed(() => {
@@ -168,6 +197,28 @@ const columns: TableColumn[] = [
       return new Date(value as string).toLocaleString('zh-CN');
     },
   },
+  {
+    key: 'signature_status',
+    title: '签字',
+    width: '100px',
+    align: 'center',
+    render: (_value: unknown, row: unknown) => {
+      const record = row as LotteryRecord;
+      const isSigned = record.signature_status === 'signed';
+      if (isSigned && record.signature_url) {
+        return h('button', {
+          class: 'inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium',
+          onClick: () => openSignaturePreview(record),
+        }, [
+          h(Eye, { class: 'w-4 h-4' }),
+          '已签',
+        ]);
+      }
+      return h('span', {
+        class: 'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-500',
+      }, '未签');
+    },
+  },
 ];
 
 // 获取活动详情
@@ -223,6 +274,19 @@ const handleSearch = useDebounceFn(() => {
   currentPage.value = 1;
   fetchLotteryRecords();
 }, 500);
+
+// 打开签字预览
+const openSignaturePreview = (record: LotteryRecord) => {
+  if (record.signature_url) {
+    previewSignatureUrl.value = record.signature_url;
+    previewRecordInfo.value = {
+      code: record.lotteryCode || '-',
+      name: record.name || '-',
+      signedAt: record.signed_at ? new Date(record.signed_at).toLocaleString('zh-CN') : '-',
+    };
+    showSignaturePreview.value = true;
+  }
+};
 
 // 初始化数据
 const initData = async () => {

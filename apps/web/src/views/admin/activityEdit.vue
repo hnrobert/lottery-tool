@@ -158,6 +158,39 @@
               <FormMessage />
             </FormItem>
           </FormField>
+
+          <!-- 签字设置（仅线下抽奖） -->
+          <div v-if="form.values.lottery_mode === 'offline'" class="pt-4 border-t">
+            <FormField v-slot="{ componentField }" name="settings.require_signature">
+              <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div class="space-y-0.5">
+                  <FormLabel class="text-base">开启签字确认</FormLabel>
+                  <FormDescription>
+                    线下抽奖完成后，弹出签字板要求参与者签字确认。需先在超级管理员设置中配置 COS。
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="componentField.value"
+                    :class="[
+                      'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+                      componentField.value ? 'bg-blue-600' : 'bg-gray-200',
+                    ]"
+                    @click="form.setFieldValue('settings.require_signature', !componentField.value)"
+                  >
+                    <span
+                      :class="[
+                        'pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform',
+                        componentField.value ? 'translate-x-5' : 'translate-x-0',
+                      ]"
+                    />
+                  </button>
+                </FormControl>
+              </FormItem>
+            </FormField>
+          </div>
         </div>
 
         <!-- 提交按钮 -->
@@ -236,6 +269,7 @@ const formSchema = toTypedSchema(z.object({
       '12_digit_number',
       '12_digit_alphanumeric',
     ]).optional(),
+    require_signature: z.boolean().optional(),
 
   }).optional(),
 }).refine((data) => {
@@ -260,6 +294,7 @@ const form = useForm({
     settings: {
       max_lottery_codes: undefined,
       lottery_code_format: '4_digit_number',
+      require_signature: false,
 
     },
   },
@@ -300,6 +335,7 @@ const loadActivity = async () => {
       settings: {
         max_lottery_codes: activity.settings?.max_lottery_codes,
         lottery_code_format: activity.settings?.lottery_code_format || '4_digit_number',
+        require_signature: activity.settings?.require_signature || false,
 
       },
     });
@@ -324,12 +360,13 @@ const onSubmit = form.handleSubmit(async (values) => {
       settings: {
         max_lottery_codes: values.settings?.max_lottery_codes || undefined,
         lottery_code_format: values.settings?.lottery_code_format || undefined,
+        require_signature: values.settings?.require_signature || false,
 
       },
     };
     
-    // 清理空的 settings
-    if (formData.settings && Object.values(formData.settings).every(v => v === undefined || v === false)) {
+    // 清理空的 settings（仅当所有值都是 undefined 时才删除）
+    if (formData.settings && Object.values(formData.settings).every(v => v === undefined)) {
       delete formData.settings;
     }
     

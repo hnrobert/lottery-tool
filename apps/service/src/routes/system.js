@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const { body, query, param, validationResult } = require('express-validator');
 const { User, OperationLog, Activity, LotteryRecord } = require('../models');
@@ -6,7 +6,9 @@ const { Op } = require('sequelize');
 const { logOperation } = require('../middleware/operationLogger');
 const bcrypt = require('bcryptjs');
 const moment = require('moment');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireSuperAdmin } = require('../middleware/auth');
+const { getMaskedCosConfig, isCosConfigured } = require('../utils/systemConfig');
+const cosClient = require('../utils/cosClient');
 
 // 所有system路由都需要认证和管理员权限
 router.use(authenticateToken);
@@ -639,6 +641,36 @@ router.get('/config', async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// ==================== COS 配置（只读，仅环境变量） ====================
+// COS 配置仅通过服务端环境变量（.env）设置，不支持通过 API 修改
+// 密钥只放服务端，推荐使用子账号最小权限
+router.get('/cos-config', [
+  authenticateToken,
+  requireSuperAdmin,
+], async (req, res, next) => {
+  try {
+    const config = getMaskedCosConfig();
+    res.json({
+      success: true,
+      data: {
+        configured: config !== null,
+        config: config || {
+          secret_id: '',
+          secret_key: '',
+          bucket: '',
+          region: '',
+          custom_domain: '',
+          path_prefix: '',
+        },
+        note: 'COS 配置仅通过服务端环境变量（.env）设置，不支持通过此接口修改。请设置 COS_SECRET_ID、COS_SECRET_KEY、COS_BUCKET、COS_REGION 等环境变量后重启服务。',
+      },
+    });
+  } catch (error) {
+    console.error('获取COS配置失败:', error);
+    res.status(500).json({ success: false, message: '获取COS配置失败' });
   }
 });
 

@@ -99,7 +99,8 @@ const Activity = sequelize.define('Activity', {
           max_lottery_codes: 1000,
           lottery_code_format: '8_digit_number',
           allow_duplicate_phone: false,
-          lottery_strategy: 'probability' // 抽奖策略：'probability'(概率模式) 或 'guaranteed'(100%中奖模式)
+          lottery_strategy: 'probability', // 抽奖策略：'probability'(概率模式) 或 'guaranteed'(100%中奖模式)
+          require_signature: false,
         };
       }
       
