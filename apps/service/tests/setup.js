@@ -24,7 +24,7 @@ process.on('uncaughtException', (error) => {
 });
 
 // 模拟数据库连接
-jest.mock('../src/config/database', () => ({
+jest.mock('../dist/config/database', () => ({
   sequelize: {
     authenticate: jest.fn().mockResolvedValue(true),
     close: jest.fn().mockResolvedValue(true),

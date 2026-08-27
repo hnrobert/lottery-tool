@@ -1,19 +1,19 @@
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User } = require('../../src/models');
+const { User } = require('../../dist/models');
 const TestUtils = require('../helpers/testUtils');
 
 // 模拟app模块
-jest.mock('../../src/app', () => {
+jest.mock('../../dist/app', () => {
   const express = require('express');
   const app = express();
   app.use(express.json());
-  app.use('/api/auth', require('../../src/routes/auth'));
+  app.use('/api/auth', require('../../dist/routes/auth').default);
   return app;
 });
 
-const app = require('../../src/app');
+const app = require('../../dist/app');
 
 describe('认证模块测试', () => {
   let testUser;

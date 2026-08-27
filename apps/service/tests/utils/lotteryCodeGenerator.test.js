@@ -1,4 +1,4 @@
-const lotteryCodeGenerator = require('../../src/utils/lotteryCodeGenerator');
+const lotteryCodeGenerator = require('../../dist/utils/lotteryCodeGenerator');
 
 describe('抽奖码生成器测试', () => {
   describe('generateLotteryCode', () => {

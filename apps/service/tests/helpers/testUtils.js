@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { User } = require('../../src/models');
+const { User } = require('../../dist/models');
 
 // 测试工具函数
 class TestUtils {

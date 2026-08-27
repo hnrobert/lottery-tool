@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const auth = require('../../src/middleware/auth');
+const auth = require('../../dist/middleware/auth');
 const TestUtils = require('../helpers/testUtils');
 
 // 模拟Express请求和响应对象

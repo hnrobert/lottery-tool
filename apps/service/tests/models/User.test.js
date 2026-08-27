@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { User } = require('../../src/models');
+const { User } = require('../../dist/models');
 const TestUtils = require('../helpers/testUtils');
 
 describe('User模型测试', () => {

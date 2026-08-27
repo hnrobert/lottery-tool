@@ -11,11 +11,14 @@ COPY pnpm-lock.yaml ./
 # 安装pnpm
 RUN npm install -g pnpm
 
-# 安装依赖
-RUN pnpm install --prod
+# 安装依赖（含 devDependencies，用于 TypeScript 编译）
+RUN pnpm install
 
 # 复制项目文件
 COPY . .
+
+# 编译 TypeScript
+RUN pnpm build
 
 # 设置环境变量
 ENV NODE_ENV=production
@@ -32,4 +35,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 # 启动应用
-CMD ["node", "src/app.js"] 
+CMD ["node", "dist/app.js"] 

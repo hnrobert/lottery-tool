@@ -1,17 +1,17 @@
 const request = require('supertest');
-const { Activity, Prize, LotteryCode, LotteryRecord } = require('../../src/models');
+const { Activity, Prize, LotteryCode, LotteryRecord } = require('../../dist/models');
 const TestUtils = require('../helpers/testUtils');
 
 // 模拟app模块
-jest.mock('../../src/app', () => {
+jest.mock('../../dist/app', () => {
   const express = require('express');
   const app = express();
   app.use(express.json());
-  app.use('/api/lottery', require('../../src/routes/lottery'));
+  app.use('/api/lottery', require('../../dist/routes/lottery').default);
   return app;
 });
 
-const app = require('../../src/app');
+const app = require('../../dist/app');
 
 describe('抽奖模块测试', () => {
   let authToken;

@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { sequelize } = require('../../src/config/database');
+const { sequelize } = require('../../dist/config/database');
 const TestUtils = require('../helpers/testUtils');
 
 // 创建测试应用实例
@@ -10,7 +10,7 @@ beforeAll(async () => {
   await sequelize.authenticate();
   
   // 导入模型关联
-  require('../../src/models');
+  require('../../dist/models');
   
   // 创建应用实例
   const express = require('express');
@@ -18,14 +18,14 @@ beforeAll(async () => {
   app.use(express.json());
   
   // 添加中间件
-  app.use(require('../../src/middleware/errorHandler'));
+  app.use(require('../../dist/middleware/errorHandler').default);
   
   // 添加路由
-  app.use('/api/auth', require('../../src/routes/auth'));
-  app.use('/api/admin', require('../../src/routes/admin'));
-  app.use('/api/lottery', require('../../src/routes/lottery'));
-  app.use('/api/lottery-codes', require('../../src/routes/lotteryCode'));
-  app.use('/api/system', require('../../src/routes/system'));
+  app.use('/api/auth', require('../../dist/routes/auth').default);
+  app.use('/api/admin', require('../../dist/routes/admin').default);
+  app.use('/api/lottery', require('../../dist/routes/lottery').default);
+  app.use('/api/lottery-codes', require('../../dist/routes/lotteryCode').default);
+  app.use('/api/system', require('../../dist/routes/system').default);
   
   // 健康检查端点
   app.get('/health', (req, res) => {
