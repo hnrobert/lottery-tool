@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 
-import { generateToken, authenticateToken, requireSuperAdmin } from '../middleware/auth';
+import { generateToken, authenticateToken, optionalAuth } from '../middleware/auth';
 import { logAuthOperation } from '../middleware/operationLogger';
 import { createError } from '../utils/customError';
+import { AppDataSource } from '../utils/database';
+import { User } from '../entities/user.entity';
 import * as UserService from '../services/user.service';
 import { OPERATION_TYPES } from '../services/operation-log.service';
 
@@ -77,12 +79,13 @@ async (req: Request, res: Response, next: NextFunction) => {
 
 /**
  * @route   POST /api/auth/register
- * @desc    创建新管理员账户（仅超级管理员可操作）
- * @access  Private (Super Admin only)
+ * @desc    注册账户。系统尚无用户时（首次注册）自动成为超级管理员，无需认证；
+ *          已有用户后仅超级管理员可继续创建账户。
+ * @access  Public（仅首位注册）/ Private (Super Admin only)
  */
 router.post('/register', [
-  authenticateToken,
-  requireSuperAdmin,
+  // optionalAuth：首位注册无需token；已有用户后由处理器内校验超管身份
+  optionalAuth,
 
   body('username')
     .notEmpty()
@@ -104,6 +107,7 @@ router.post('/register', [
     .withMessage('密码必须包含字母和数字'),
 
   body('role')
+    .optional()
     .isIn(['admin', 'super_admin'])
     .withMessage('角色只能是admin或super_admin')
 ],
@@ -113,24 +117,49 @@ async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { username, email, password, role } = req.body;
 
-    // 检查用户名是否已存在
-    const existingUser = await UserService.findByUsername(username);
-    if (existingUser) {
-      throw createError('VALIDATION_DUPLICATE_DATA', '用户名已存在');
-    }
+    // 事务 + advisory lock：防止两个并发"首位注册"都看到空表而双双成为超管
+    const { newUser, isFirstUser } = await AppDataSource.transaction(async (manager) => {
+      await manager.query(`SELECT pg_advisory_xact_lock(hashtext('auth_register_bootstrap'))`);
 
-    // 检查邮箱是否已存在
-    const existingEmail = await UserService.findByEmail(email);
-    if (existingEmail) {
-      throw createError('VALIDATION_DUPLICATE_DATA', '邮箱已存在');
-    }
+      const userCount = await manager.getRepository(User).count();
 
-    // 创建用户
-    const newUser = await UserService.createUser({
-      username,
-      email,
-      password,
-      role
+      if (userCount > 0) {
+        // 非首次注册：必须由超级管理员操作
+        const operator = (req as any).user;
+        if (!operator) {
+          throw createError('AUTH_TOKEN_INVALID', '系统已完成初始化，注册需要超级管理员权限');
+        }
+        if (operator.role !== 'super_admin') {
+          throw createError('AUTH_INSUFFICIENT_PERMISSION', '只有超级管理员可以创建账户');
+        }
+      }
+
+      // 检查用户名是否已存在
+      const existingUser = await manager.getRepository(User).findOneBy({ username });
+      if (existingUser) {
+        throw createError('VALIDATION_DUPLICATE_DATA', '用户名已存在');
+      }
+
+      // 检查邮箱是否已存在
+      const existingEmail = await manager.getRepository(User).findOneBy({ email });
+      if (existingEmail) {
+        throw createError('VALIDATION_DUPLICATE_DATA', '邮箱已存在');
+      }
+
+      // 创建用户：首位注册者强制为超级管理员
+      const isFirst = userCount === 0;
+      const assignedRole = isFirst ? 'super_admin' : (role || 'admin');
+      const passwordHash = await UserService.hashPassword(password);
+
+      const created = await manager.getRepository(User).save({
+        username,
+        email,
+        password_hash: passwordHash,
+        role: assignedRole,
+        status: 'active',
+      });
+
+      return { newUser: created, isFirstUser: isFirst };
     });
 
     res.status(201).json({
@@ -138,7 +167,9 @@ async (req: Request, res: Response, next: NextFunction) => {
       data: {
         user: UserService.toSafeUser(newUser)
       },
-      message: '用户创建成功'
+      message: isFirstUser
+        ? '注册成功，您是首位用户，已成为超级管理员'
+        : '用户创建成功'
     });
   } catch (error) {
     next(error);

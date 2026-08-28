@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 /**
- * Builds the Node CLI tooling (migration scripts + installer + API smoke test)
+ * Builds the Node CLI tooling (migration scripts + API smoke test)
  * into plain ESM bundles via tsup (esbuild).
  *
  * tsx is NOT an option here: under Node 24 it hands .ts files to native type
@@ -17,7 +17,6 @@ export default defineConfig({
     'scripts/migration-revert.ts',
     'scripts/migration-generate.ts',
     'scripts/migration-check.ts',
-    'scripts/install.ts',
     'scripts/test-apis.ts',
   ],
   outDir: 'scripts/dist',

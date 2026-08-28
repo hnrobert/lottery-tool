@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.test.json",
     "start": "node dist/app.js",
     "dev": "tsup --config tsup.dev.config.ts",
-    "install-system": "pnpm run --silent build:scripts && node scripts/dist/install.mjs",
     "migration:run": "pnpm run --silent build:scripts && node scripts/dist/migration-run.mjs",
     "migration:revert": "pnpm run --silent build:scripts && node scripts/dist/migration-revert.mjs",
     "migration:generate": "pnpm run --silent build:scripts && node scripts/dist/migration-generate.mjs",

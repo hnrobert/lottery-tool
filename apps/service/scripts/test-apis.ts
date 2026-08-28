@@ -1,13 +1,8 @@
 import axios from 'axios';
-import path from 'path';
-import fs from 'fs';
 
 // 配置
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const API_BASE = `${BASE_URL}/api`;
-
-// 本脚本经 tsup 构建为 scripts/dist/test-apis.mjs，向上两级回到服务根目录
-const SERVICE_ROOT = path.resolve(import.meta.dirname, '../..');
 
 console.log('=== 抽奖系统API测试 ===\n');
 
@@ -73,7 +68,7 @@ const tests: Array<() => Promise<void>> = [
       }
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
-        throw new Error('用户名或密码错误 - 请确保已运行安装脚本');
+        throw new Error('用户名或密码错误 - 请先通过 /auth/register 注册首位超级管理员');
       }
       throw error;
     }
@@ -519,24 +514,20 @@ const runTests = async (): Promise<void> => {
   process.exit(testResults.failed > 0 ? 1 : 0);
 };
 
-// 检查系统是否已安装
-const checkSystemInstalled = (): void => {
-  const configPath = path.join(SERVICE_ROOT, 'config', 'system.json');
-  if (!fs.existsSync(configPath)) {
-    console.log('❌ 系统未安装，请先运行: npm run install-system');
-    process.exit(1);
-  }
-
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  if (!config.installed) {
-    console.log('❌ 系统安装未完成，请先运行: npm run install-system');
+// 检查目标服务是否在线（安装向导已移除：首位注册用户自动成为超级管理员）
+const checkServiceOnline = async (): Promise<void> => {
+  const axios = (await import('axios')).default;
+  try {
+    await axios.get(`${BASE_URL}/health`, { timeout: 3000 });
+  } catch {
+    console.log(`❌ 服务未就绪：${BASE_URL}/health 不可达`);
+    console.log('   请先启动服务（pnpm dev / pnpm start），并通过 POST /auth/register 注册首位超级管理员');
     process.exit(1);
   }
 };
 
 // 启动测试
-checkSystemInstalled();
-runTests().catch(error => {
+checkServiceOnline().then(() => runTests()).catch(error => {
   console.error('测试运行出错:', error);
   process.exit(1);
 });

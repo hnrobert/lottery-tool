@@ -37,23 +37,9 @@
 pnpm install
 ```
 
-### 3. 系统初始化
+### 3. 启动服务（无安装向导）
 
-初次启动时，将会自动进入安装程序，引导您完成数据库配置、管理员账户创建等步骤。
-
-若安装失败，您可以使用自动化安装脚本：
-
-```bash
-pnpm run install-system
-```
-
-安装脚本将引导您：
-- 配置数据库连接
-- 创建数据库和表结构
-- 设置超级管理员账户
-- 生成配置文件
-
-### 4. 启动服务
+首次启动时迁移会自动建表。**首位通过 `/auth/register` 注册的用户自动成为超级管理员**；此后注册需要超级管理员令牌。
 
 ```bash
 # 生产模式
@@ -63,7 +49,15 @@ pnpm start
 pnpm dev
 ```
 
-### 5. 测试API
+创建首位超级管理员：
+
+```bash
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","email":"admin@example.com","password":"your_password1"}'
+```
+
+### 4. 测试API
 
 运行自动化测试确保系统正常工作：
 
@@ -165,44 +159,37 @@ curl -X POST http://localhost:3000/api/webhook/activities/WEBHOOK_ID/lottery-cod
 ## 目录结构
 
 ```
-backend-2/
+apps/service/
 ├── src/
-│   ├── app.ts                 # 应用入口
-│   ├── config/
-│   │   └── database.ts        # 数据库配置
+│   ├── app.ts                 # 应用入口（启动即跑迁移）
+│   ├── entities/              # TypeORM 实体（表结构唯一来源）
+│   ├── migrations/            # 自动生成的迁移 + index.ts barrel
+│   ├── services/              # 业务服务（原 model 静态方法）
 │   ├── middleware/
 │   │   ├── auth.ts           # 认证中间件
 │   │   ├── errorHandler.ts   # 错误处理
 │   │   └── operationLogger.ts # 操作日志
-│   ├── models/               # 数据模型
-│   │   ├── User.ts
-│   │   ├── Activity.ts
-│   │   ├── Prize.ts
-│   │   ├── LotteryCode.ts
-│   │   ├── LotteryRecord.ts
-│   │   └── OperationLog.ts
 │   ├── routes/               # 路由
-│   │   ├── auth.ts          # 认证路由
+│   │   ├── auth.ts          # 认证路由（首位注册即超管）
 │   │   ├── admin/           # 管理员路由
 │   │   ├── lottery.ts       # 抽奖路由
 │   │   ├── webhook.ts       # Webhook路由
 │   │   └── system.ts        # 系统管理路由
-│   └── utils/               # 工具函数
+│   └── utils/
+│       ├── database.ts      # DataSource（PG 连接 + 迁移执行）
 │       ├── logger.ts
 │       ├── customError.ts
 │       └── lotteryCodeGenerator.ts
-├── scripts/
-│   ├── install.ts           # 安装脚本
-│   └── test-apis.ts         # API测试脚本
-├── logs/                    # 日志文件
-├── config/                  # 配置文件
+├── scripts/                  # 迁移 CLI + API 冒烟（tsup 构建到 scripts/dist）
+├── tsup.config.ts / tsup.dev.config.ts
+├── docker-compose.yml        # 含 PostgreSQL 18 服务
 ├── package.json
 └── README.md
 ```
 
 ## 环境变量 ENV
 
-系统运行时需要以下环境变量（安装脚本会自动生成）：
+系统运行时需要以下环境变量（参照 `.env.example` 配置，或通过环境变量注入）：
 
 ```env
 # 服务器配置
@@ -213,7 +200,7 @@ NODE_ENV=production
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=lottery_system
-DB_USER=root
+DB_USER=postgres
 DB_PASSWORD=your_password
 
 # JWT配置
@@ -229,15 +216,14 @@ LOG_FILE=logs/app.log
 
 ### 问题解决
 
-之前的 `ELIFECYCLE Command failed with exit code 1` 错误是因为应用在Docker环境中尝试运行交互式安装脚本，但Docker容器是非交互式的。
+应用无交互式安装步骤：容器启动时自动应用迁移，随后通过 `/auth/register` 注册首位超级管理员即可。
 
 ### 解决方案
 
-#### 1. 修改了应用启动逻辑
+#### 1. 启动逻辑
 
-- 在Docker环境中自动跳过交互式安装
-- 添加了Docker环境检测
-- 数据库连接失败时不会立即退出应用
+- 容器启动时自动应用数据库迁移
+- 数据库连接失败时不会立即退出（等待依赖就绪）
 
 #### 2. 使用方法
 
