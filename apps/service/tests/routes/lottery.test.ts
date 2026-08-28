@@ -1,6 +1,8 @@
-const request = require('supertest');
+import request from 'supertest';
+import TestUtils from '../helpers/testUtils';
+
+// dist 为编译产物（无 .d.ts），保持 require 以获得宽松类型
 const { Activity, Prize, LotteryCode, LotteryRecord } = require('../../dist/models');
-const TestUtils = require('../helpers/testUtils');
 
 // 模拟app模块
 jest.mock('../../dist/app', () => {
@@ -14,10 +16,10 @@ jest.mock('../../dist/app', () => {
 const app = require('../../dist/app');
 
 describe('抽奖模块测试', () => {
-  let authToken;
-  let testActivity;
-  let testPrize;
-  let testLotteryCode;
+  let authToken: string;
+  let testActivity: any;
+  let testPrize: any;
+  let testLotteryCode: any;
 
   beforeAll(async () => {
     // 创建测试用户并获取token
@@ -299,4 +301,4 @@ describe('抽奖模块测试', () => {
       expect(response.body.success).toBe(false);
     });
   });
-}); 
+});

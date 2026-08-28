@@ -9,7 +9,7 @@
 ### ✅ 已完成的测试
 
 #### 1. 单元测试 (Unit Tests)
-- **抽奖码生成器测试** (`tests/unit/lotteryCodeGenerator.test.js`)
+- **抽奖码生成器测试** (`tests/unit/lotteryCodeGenerator.test.ts`)
   - ✅ 生成不同格式的抽奖码
   - ✅ 批量生成唯一抽奖码
   - ✅ 验证抽奖码格式
@@ -17,7 +17,7 @@
   - ✅ 性能测试
   - **测试结果**: 20个测试用例全部通过
 
-- **认证中间件测试** (`tests/unit/auth.test.js`)
+- **认证中间件测试** (`tests/unit/auth.test.ts`)
   - ✅ JWT token验证
   - ✅ 权限控制
   - ✅ 角色验证
@@ -118,10 +118,10 @@ npm test -- tests/unit/
 ### 运行特定测试
 ```bash
 # 抽奖码生成器测试
-npm test -- tests/unit/lotteryCodeGenerator.test.js
+npm test -- tests/unit/lotteryCodeGenerator.test.ts
 
 # 认证中间件测试
-npm test -- tests/unit/auth.test.js
+npm test -- tests/unit/auth.test.ts
 ```
 
 ### 生成覆盖率报告
@@ -136,7 +136,7 @@ npm run test:coverage
 {
   "testEnvironment": "node",
   "testTimeout": 30000,
-  "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+  "setupFilesAfterEnv": ["<rootDir>/tests/setup.ts"],
   "collectCoverageFrom": [
     "src/**/*.js",
     "!src/app.js",

@@ -1,32 +1,40 @@
-const request = require('supertest');
+import request from 'supertest';
+import express from 'express';
+import TestUtils from '../helpers/testUtils';
+
+// dist 为编译产物（无 .d.ts），保持 require 以获得宽松类型
 const { sequelize } = require('../../dist/config/database');
-const TestUtils = require('../helpers/testUtils');
+const errorHandler = require('../../dist/middleware/errorHandler').default;
+const authRoutes = require('../../dist/routes/auth').default;
+const adminRoutes = require('../../dist/routes/admin').default;
+const lotteryRoutes = require('../../dist/routes/lottery').default;
+const lotteryCodeRoutes = require('../../dist/routes/lotteryCode').default;
+const systemRoutes = require('../../dist/routes/system').default;
 
 // 创建测试应用实例
-let app;
+let app: express.Express;
 
 beforeAll(async () => {
   // 确保数据库连接
   await sequelize.authenticate();
-  
+
   // 导入模型关联
   require('../../dist/models');
-  
+
   // 创建应用实例
-  const express = require('express');
   app = express();
   app.use(express.json());
-  
+
   // 添加中间件
-  app.use(require('../../dist/middleware/errorHandler').default);
-  
+  app.use(errorHandler);
+
   // 添加路由
-  app.use('/api/auth', require('../../dist/routes/auth').default);
-  app.use('/api/admin', require('../../dist/routes/admin').default);
-  app.use('/api/lottery', require('../../dist/routes/lottery').default);
-  app.use('/api/lottery-codes', require('../../dist/routes/lotteryCode').default);
-  app.use('/api/system', require('../../dist/routes/system').default);
-  
+  app.use('/api/auth', authRoutes);
+  app.use('/api/admin', adminRoutes);
+  app.use('/api/lottery', lotteryRoutes);
+  app.use('/api/lottery-codes', lotteryCodeRoutes);
+  app.use('/api/system', systemRoutes);
+
   // 健康检查端点
   app.get('/health', (req, res) => {
     res.json({
@@ -46,10 +54,10 @@ afterAll(async () => {
 });
 
 describe('应用集成测试', () => {
-  let authToken;
-  let testActivity;
-  let testPrize;
-  let testLotteryCode;
+  let authToken: string;
+  let testActivity: any;
+  let testPrize: any;
+  let testLotteryCode: any;
 
   beforeAll(async () => {
     // 创建测试用户并登录
@@ -239,7 +247,7 @@ describe('应用集成测试', () => {
   });
 
   describe('权限控制', () => {
-    let normalUserToken;
+    let normalUserToken: string;
 
     beforeAll(async () => {
       // 创建普通用户
@@ -307,9 +315,9 @@ describe('应用集成测试', () => {
 
     it('应该能够快速响应健康检查', async () => {
       const startTime = Date.now();
-      
+
       const response = await request(app).get('/health');
-      
+
       const endTime = Date.now();
       const responseTime = endTime - startTime;
 
@@ -317,4 +325,4 @@ describe('应用集成测试', () => {
       expect(responseTime).toBeLessThan(1000); // 1秒内响应
     });
   });
-}); 
+});

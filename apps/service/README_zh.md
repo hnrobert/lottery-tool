@@ -167,33 +167,33 @@ curl -X POST http://localhost:3000/api/webhook/activities/WEBHOOK_ID/lottery-cod
 ```
 backend-2/
 ├── src/
-│   ├── app.js                 # 应用入口
+│   ├── app.ts                 # 应用入口
 │   ├── config/
-│   │   └── database.js        # 数据库配置
+│   │   └── database.ts        # 数据库配置
 │   ├── middleware/
-│   │   ├── auth.js           # 认证中间件
-│   │   ├── errorHandler.js   # 错误处理
-│   │   └── operationLogger.js # 操作日志
+│   │   ├── auth.ts           # 认证中间件
+│   │   ├── errorHandler.ts   # 错误处理
+│   │   └── operationLogger.ts # 操作日志
 │   ├── models/               # 数据模型
-│   │   ├── User.js
-│   │   ├── Activity.js
-│   │   ├── Prize.js
-│   │   ├── LotteryCode.js
-│   │   ├── LotteryRecord.js
-│   │   └── OperationLog.js
+│   │   ├── User.ts
+│   │   ├── Activity.ts
+│   │   ├── Prize.ts
+│   │   ├── LotteryCode.ts
+│   │   ├── LotteryRecord.ts
+│   │   └── OperationLog.ts
 │   ├── routes/               # 路由
-│   │   ├── auth.js          # 认证路由
+│   │   ├── auth.ts          # 认证路由
 │   │   ├── admin/           # 管理员路由
-│   │   ├── lottery.js       # 抽奖路由
-│   │   ├── webhook.js       # Webhook路由
-│   │   └── system.js        # 系统管理路由
+│   │   ├── lottery.ts       # 抽奖路由
+│   │   ├── webhook.ts       # Webhook路由
+│   │   └── system.ts        # 系统管理路由
 │   └── utils/               # 工具函数
-│       ├── logger.js
-│       ├── customError.js
-│       └── lotteryCodeGenerator.js
+│       ├── logger.ts
+│       ├── customError.ts
+│       └── lotteryCodeGenerator.ts
 ├── scripts/
-│   ├── install.js           # 安装脚本
-│   └── test-apis.js         # API测试脚本
+│   ├── install.ts           # 安装脚本
+│   └── test-apis.ts         # API测试脚本
 ├── logs/                    # 日志文件
 ├── config/                  # 配置文件
 ├── package.json
@@ -329,7 +329,7 @@ docker logs lottery-backend
 ## 开发说明
 ### 添加新的抽奖码格式
 
-1. 在 `src/utils/lotteryCodeGenerator.js` 中添加新格式
+1. 在 `src/utils/lotteryCodeGenerator.ts` 中添加新格式
 2. 更新验证规则
 3. 更新API文档
 

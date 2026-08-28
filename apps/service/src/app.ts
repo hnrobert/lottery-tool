@@ -23,8 +23,8 @@ const autoInstallSystem = (): Promise<void> => {
   return new Promise((resolve, reject) => {
     console.log('\n=== 检测到系统未安装，正在启动自动安装流程 ===\n');
 
-    // 使用spawn运行安装脚本
-    const installProcess = spawn('node', ['scripts/install.js'], {
+    // 使用spawn运行安装脚本（编译产物位于dist/scripts）
+    const installProcess = spawn('node', ['dist/scripts/install.js'], {
       cwd: path.join(__dirname, '..'),
       stdio: 'inherit' // 继承父进程的stdio，这样可以看到安装过程的交互
     });

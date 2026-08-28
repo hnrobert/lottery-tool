@@ -1,38 +1,39 @@
+// dist 为编译产物（无 .d.ts），保持 require 以获得宽松类型
 const lotteryCodeGenerator = require('../../dist/utils/lotteryCodeGenerator');
 
-describe('抽奖码生成器单元测试', () => {
+describe('抽奖码生成器测试', () => {
   describe('generateLotteryCode', () => {
     it('应该生成4位数字抽奖码', () => {
       const code = lotteryCodeGenerator.generateLotteryCode('4_digit_number');
-      
+
       expect(code).toMatch(/^\d{4}$/);
       expect(code.length).toBe(4);
     });
 
     it('应该生成8位数字抽奖码', () => {
       const code = lotteryCodeGenerator.generateLotteryCode('8_digit_number');
-      
+
       expect(code).toMatch(/^\d{8}$/);
       expect(code.length).toBe(8);
     });
 
     it('应该生成12位数字抽奖码', () => {
       const code = lotteryCodeGenerator.generateLotteryCode('12_digit_number');
-      
+
       expect(code).toMatch(/^\d{12}$/);
       expect(code.length).toBe(12);
     });
 
     it('应该生成8位数字字母混合抽奖码', () => {
       const code = lotteryCodeGenerator.generateLotteryCode('8_digit_alphanumeric');
-      
+
       expect(code).toMatch(/^[0-9a-z]{8}$/);
       expect(code.length).toBe(8);
     });
 
     it('应该生成12位数字字母混合抽奖码', () => {
       const code = lotteryCodeGenerator.generateLotteryCode('12_digit_alphanumeric');
-      
+
       expect(code).toMatch(/^[0-9a-zA-Z]{12}$/);
       expect(code.length).toBe(12);
     });
@@ -47,12 +48,12 @@ describe('抽奖码生成器单元测试', () => {
   describe('generateBatchLotteryCodes', () => {
     it('应该生成指定数量的唯一抽奖码', () => {
       const codes = lotteryCodeGenerator.generateBatchLotteryCodes('8_digit_number', 5);
-      
+
       expect(codes).toHaveLength(5);
-      codes.forEach(code => {
+      codes.forEach((code: string) => {
         expect(code).toMatch(/^\d{8}$/);
       });
-      
+
       // 验证唯一性
       const uniqueCodes = new Set(codes);
       expect(uniqueCodes.size).toBe(5);
@@ -60,12 +61,12 @@ describe('抽奖码生成器单元测试', () => {
 
     it('应该生成大量唯一抽奖码', () => {
       const codes = lotteryCodeGenerator.generateBatchLotteryCodes('4_digit_number', 100);
-      
+
       expect(codes).toHaveLength(100);
-      codes.forEach(code => {
+      codes.forEach((code: string) => {
         expect(code).toMatch(/^\d{4}$/);
       });
-      
+
       // 验证唯一性
       const uniqueCodes = new Set(codes);
       expect(uniqueCodes.size).toBe(100);
@@ -73,7 +74,7 @@ describe('抽奖码生成器单元测试', () => {
 
     it('应该处理数量为0的情况', () => {
       const codes = lotteryCodeGenerator.generateBatchLotteryCodes('8_digit_number', 0);
-      
+
       expect(codes).toHaveLength(0);
       expect(Array.isArray(codes)).toBe(true);
     });
@@ -133,11 +134,11 @@ describe('抽奖码生成器单元测试', () => {
   describe('getSupportedFormats', () => {
     it('应该返回支持的格式列表', () => {
       const formats = lotteryCodeGenerator.getSupportedFormats();
-      
+
       expect(Array.isArray(formats)).toBe(true);
       expect(formats.length).toBe(5);
-      
-      const formatNames = formats.map(f => f.format);
+
+      const formatNames = formats.map((f: any) => f.format);
       expect(formatNames).toContain('4_digit_number');
       expect(formatNames).toContain('8_digit_number');
       expect(formatNames).toContain('12_digit_number');
@@ -160,18 +161,43 @@ describe('抽奖码生成器单元测试', () => {
     });
   });
 
+  describe('generateBatchLotteryCodes with retry', () => {
+    it('应该生成指定数量的抽奖码（带重试机制）', () => {
+      const codes = lotteryCodeGenerator.generateBatchLotteryCodes('8_digit_number', 10);
+
+      expect(codes).toHaveLength(10);
+      codes.forEach((code: string) => {
+        expect(code).toMatch(/^\d{8}$/);
+      });
+
+      // 验证唯一性
+      const uniqueCodes = new Set(codes);
+      expect(uniqueCodes.size).toBe(10);
+    });
+
+    it('应该处理大量代码生成', () => {
+      // 测试生成大量代码
+      const codes = lotteryCodeGenerator.generateBatchLotteryCodes('4_digit_number', 50);
+
+      expect(codes.length).toBe(50);
+      expect(codes.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('性能测试', () => {
     it('应该能够快速生成大量抽奖码', () => {
       const startTime = Date.now();
       const codes = lotteryCodeGenerator.generateBatchLotteryCodes('8_digit_number', 1000);
       const endTime = Date.now();
-      
+
       expect(codes).toHaveLength(1000);
       expect(endTime - startTime).toBeLessThan(5000); // 5秒内完成
-      
+
       // 验证唯一性
       const uniqueCodes = new Set(codes);
       expect(uniqueCodes.size).toBe(1000);
     });
   });
-}); 
+});
+
+export {};

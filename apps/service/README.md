@@ -167,33 +167,33 @@ curl -X POST http://localhost:3000/api/webhook/activities/WEBHOOK_ID/lottery-cod
 ```
 backend-2/
 ├── src/
-│   ├── app.js                 # Application entry
+│   ├── app.ts                 # Application entry
 │   ├── config/
-│   │   └── database.js        # Database configuration
+│   │   └── database.ts        # Database configuration
 │   ├── middleware/
-│   │   ├── auth.js           # Authentication middleware
-│   │   ├── errorHandler.js   # Error handling
-│   │   └── operationLogger.js # Operation logging
+│   │   ├── auth.ts           # Authentication middleware
+│   │   ├── errorHandler.ts   # Error handling
+│   │   └── operationLogger.ts # Operation logging
 │   ├── models/               # Data models
-│   │   ├── User.js
-│   │   ├── Activity.js
-│   │   ├── Prize.js
-│   │   ├── LotteryCode.js
-│   │   ├── LotteryRecord.js
-│   │   └── OperationLog.js
+│   │   ├── User.ts
+│   │   ├── Activity.ts
+│   │   ├── Prize.ts
+│   │   ├── LotteryCode.ts
+│   │   ├── LotteryRecord.ts
+│   │   └── OperationLog.ts
 │   ├── routes/               # Routes
-│   │   ├── auth.js          # Authentication routes
+│   │   ├── auth.ts          # Authentication routes
 │   │   ├── admin/           # Admin routes
-│   │   ├── lottery.js       # Lottery routes
-│   │   ├── webhook.js       # Webhook routes
-│   │   └── system.js        # System management routes
+│   │   ├── lottery.ts       # Lottery routes
+│   │   ├── webhook.ts       # Webhook routes
+│   │   └── system.ts        # System management routes
 │   └── utils/               # Utility functions
-│       ├── logger.js
-│       ├── customError.js
-│       └── lotteryCodeGenerator.js
+│       ├── logger.ts
+│       ├── customError.ts
+│       └── lotteryCodeGenerator.ts
 ├── scripts/
-│   ├── install.js           # Installation script
-│   └── test-apis.js         # API testing script
+│   ├── install.ts           # Installation script
+│   └── test-apis.ts         # API testing script
 ├── logs/                    # Log files
 ├── config/                  # Configuration files
 ├── package.json
@@ -228,7 +228,7 @@ LOG_FILE=logs/app.log
 ## Development Notes
 ### Adding New Lottery Code Formats
 
-1. Add new format in `src/utils/lotteryCodeGenerator.js`
+1. Add new format in `src/utils/lotteryCodeGenerator.ts`
 2. Update validation rules
 3. Update API documentation
 

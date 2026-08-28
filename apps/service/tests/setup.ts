@@ -1,5 +1,7 @@
 // Jest测试全局设置
-require('dotenv').config();
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // 设置测试环境变量
 process.env.NODE_ENV = 'test';
@@ -30,4 +32,4 @@ jest.mock('../dist/config/database', () => ({
     close: jest.fn().mockResolvedValue(true),
     sync: jest.fn().mockResolvedValue(true)
   }
-})); 
+}));

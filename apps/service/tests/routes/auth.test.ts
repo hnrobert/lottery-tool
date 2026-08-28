@@ -1,9 +1,7 @@
-const request = require('supertest');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { User } = require('../../dist/models');
-const TestUtils = require('../helpers/testUtils');
+import request from 'supertest';
+import TestUtils from '../helpers/testUtils';
 
+// dist 为编译产物（无 .d.ts），保持 require 以获得宽松类型
 // 模拟app模块
 jest.mock('../../dist/app', () => {
   const express = require('express');
@@ -16,8 +14,8 @@ jest.mock('../../dist/app', () => {
 const app = require('../../dist/app');
 
 describe('认证模块测试', () => {
-  let testUser;
-  let authToken;
+  let testUser: any;
+  let authToken: string;
 
   beforeAll(async () => {
     // 创建测试用户
@@ -206,7 +204,7 @@ describe('认证模块测试', () => {
         .post('/api/auth/register')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          username: 'incomplete',
+          username: 'incomplete'
           // 缺少其他必需字段
         });
 
@@ -226,4 +224,4 @@ describe('认证模块测试', () => {
       expect(response.body.message).toContain('登出成功');
     });
   });
-}); 
+});

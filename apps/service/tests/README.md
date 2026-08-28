@@ -8,21 +8,21 @@
 
 ```
 tests/
-├── setup.js                    # Jest全局设置
+├── setup.ts                    # Jest全局设置
 ├── helpers/
-│   └── testUtils.js           # 测试工具函数
+│   └── testUtils.ts           # 测试工具函数
 ├── routes/                     # 路由测试
-│   ├── auth.test.js           # 认证模块测试
+│   ├── auth.test.ts           # 认证模块测试
 │   └── admin/
-│       └── activities.test.js # 活动管理测试
+│       └── activities.test.ts # 活动管理测试
 ├── models/                     # 模型测试
-│   └── User.test.js           # 用户模型测试
+│   └── User.test.ts           # 用户模型测试
 ├── middleware/                 # 中间件测试
-│   └── auth.test.js           # 认证中间件测试
+│   └── auth.test.ts           # 认证中间件测试
 ├── utils/                      # 工具函数测试
-│   └── lotteryCodeGenerator.test.js # 抽奖码生成器测试
+│   └── lotteryCodeGenerator.test.ts # 抽奖码生成器测试
 ├── integration/                # 集成测试
-│   └── app.test.js            # 应用集成测试
+│   └── app.test.ts            # 应用集成测试
 └── README.md                   # 测试文档
 ```
 
@@ -44,13 +44,13 @@ npm test
 
 ```bash
 # 运行认证模块测试
-npm test -- tests/routes/auth.test.js
+npm test -- tests/routes/auth.test.ts
 
 # 运行活动管理测试
-npm test -- tests/routes/admin/activities.test.js
+npm test -- tests/routes/admin/activities.test.ts
 
 # 运行用户模型测试
-npm test -- tests/models/User.test.js
+npm test -- tests/models/User.test.ts
 ```
 
 ### 监听模式
@@ -81,14 +81,27 @@ Jest配置在`package.json`中定义：
 {
   "jest": {
     "testEnvironment": "node",
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
+    },
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json"
+    ],
     "testMatch": [
-      "**/__tests__/**/*.js",
-      "**/?(*.)+(spec|test).js"
+      "**/__tests__/**/*.ts",
+      "**/?(*.)+(spec|test).ts"
     ],
     "collectCoverageFrom": [
-      "src/**/*.js",
-      "!src/app.js",
-      "!src/config/database.js",
+      "dist/**/*.js",
+      "!dist/app.js",
+      "!dist/config/database.js",
       "!**/node_modules/**"
     ],
     "coverageDirectory": "coverage",
@@ -98,7 +111,7 @@ Jest配置在`package.json`中定义：
       "html"
     ],
     "setupFilesAfterEnv": [
-      "<rootDir>/tests/setup.js"
+      "<rootDir>/tests/setup.ts"
     ],
     "testTimeout": 30000
   }
@@ -144,7 +157,7 @@ Jest配置在`package.json`中定义：
 
 ### TestUtils
 
-`tests/helpers/testUtils.js`提供了常用的测试工具函数：
+`tests/helpers/testUtils.ts`提供了常用的测试工具函数：
 
 ```javascript
 // 生成测试JWT token
@@ -304,7 +317,7 @@ npm test && npm run test:coverage
 
 ```bash
 # 运行单个测试并显示详细输出
-npm test -- --verbose tests/routes/auth.test.js
+npm test -- --verbose tests/routes/auth.test.ts
 
 # 调试模式
 node --inspect-brk node_modules/.bin/jest --runInBand

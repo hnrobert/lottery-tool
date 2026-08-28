@@ -1,11 +1,29 @@
-const inquirer = require('inquirer');
-const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import inquirer from 'inquirer';
+import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 console.log('\n=== 抽奖系统安装向导 ===\n');
+
+// 编译产物位于 dist/scripts，向上两级回到服务根目录
+const SERVICE_ROOT = path.resolve(__dirname, '../..');
+
+// 安装向导收集的配置
+interface InstallConfig {
+  dbHost: string;
+  dbPort: string;
+  dbUser: string;
+  dbPassword: string;
+  dbName: string;
+  adminUsername: string;
+  adminEmail: string;
+  adminPassword: string;
+  confirmPassword: string;
+  jwtSecret: string;
+  serverPort: string;
+}
 
 const questions = [
   {
@@ -19,7 +37,7 @@ const questions = [
     name: 'dbPort',
     message: '请输入数据库端口:',
     default: '3306',
-    validate: (value) => {
+    validate: (value: string) => {
       const port = parseInt(value);
       return (port > 0 && port < 65536) || '请输入有效的端口号';
     }
@@ -46,7 +64,7 @@ const questions = [
     name: 'adminUsername',
     message: '请输入超级管理员用户名:',
     default: 'admin',
-    validate: (value) => {
+    validate: (value: string) => {
       return value.length >= 3 || '用户名至少3个字符';
     }
   },
@@ -54,7 +72,7 @@ const questions = [
     type: 'input',
     name: 'adminEmail',
     message: '请输入超级管理员邮箱:',
-    validate: (value) => {
+    validate: (value: string) => {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       return emailRegex.test(value) || '请输入有效的邮箱地址';
     }
@@ -63,7 +81,7 @@ const questions = [
     type: 'password',
     name: 'adminPassword',
     message: '请输入超级管理员密码:',
-    validate: (value) => {
+    validate: (value: string) => {
       return value.length >= 6 || '密码至少6个字符';
     }
   },
@@ -83,42 +101,42 @@ const questions = [
     name: 'serverPort',
     message: '请输入服务器端口:',
     default: '3000',
-    validate: (value) => {
+    validate: (value: string) => {
       const port = parseInt(value);
       return (port > 0 && port < 65536) || '请输入有效的端口号';
     }
   }
 ];
 
-const createDatabase = async (config) => {
+const createDatabase = async (config: InstallConfig): Promise<void> => {
   console.log('\n正在创建数据库...');
-  
+
   // 先连接MySQL（不指定数据库）
   const connection = await mysql.createConnection({
     host: config.dbHost,
-    port: config.dbPort,
+    port: Number(config.dbPort),
     user: config.dbUser,
     password: config.dbPassword
   });
-  
+
   // 创建数据库
   await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${config.dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
   console.log(`数据库 ${config.dbName} 创建成功`);
-  
+
   await connection.end();
 };
 
-const createTables = async (config) => {
+const createTables = async (config: InstallConfig): Promise<void> => {
   console.log('\n正在创建数据表...');
-  
+
   const connection = await mysql.createConnection({
     host: config.dbHost,
-    port: config.dbPort,
+    port: Number(config.dbPort),
     user: config.dbUser,
     password: config.dbPassword,
     database: config.dbName
   });
-  
+
   // 创建用户表
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS users (
@@ -132,7 +150,7 @@ const createTables = async (config) => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  
+
   // 创建活动表
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS activities (
@@ -152,7 +170,7 @@ const createTables = async (config) => {
       FOREIGN KEY (created_by) REFERENCES users(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  
+
   // 创建奖品表
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS prizes (
@@ -169,7 +187,7 @@ const createTables = async (config) => {
       FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  
+
   // 创建抽奖码表
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS lottery_codes (
@@ -185,7 +203,7 @@ const createTables = async (config) => {
       FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  
+
   // 创建抽奖记录表
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS lottery_records (
@@ -208,7 +226,7 @@ const createTables = async (config) => {
       FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  
+
   // 创建操作日志表
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS operation_logs (
@@ -224,51 +242,51 @@ const createTables = async (config) => {
       FOREIGN KEY (user_id) REFERENCES users(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  
+
   console.log('数据表创建成功');
   await connection.end();
 };
 
-const createSuperAdmin = async (config) => {
+const createSuperAdmin = async (config: InstallConfig): Promise<void> => {
   console.log('\n正在创建超级管理员账户...');
-  
+
   const connection = await mysql.createConnection({
     host: config.dbHost,
-    port: config.dbPort,
+    port: Number(config.dbPort),
     user: config.dbUser,
     password: config.dbPassword,
     database: config.dbName
   });
-  
+
   const passwordHash = await bcrypt.hash(config.adminPassword, 12);
-  
+
   await connection.execute(
     'INSERT INTO users (username, password_hash, email, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
     [config.adminUsername, passwordHash, config.adminEmail, 'super_admin']
   );
-  
+
   console.log(`超级管理员账户 ${config.adminUsername} 创建成功`);
   await connection.end();
 };
 
-const createConfigFiles = (config) => {
+const createConfigFiles = (config: InstallConfig): void => {
   console.log('\n正在创建配置文件...');
-  
+
   // 创建目录
-  const configDir = path.join(__dirname, '../config');
-  const logsDir = path.join(__dirname, '../logs');
-  
+  const configDir = path.join(SERVICE_ROOT, 'config');
+  const logsDir = path.join(SERVICE_ROOT, 'logs');
+
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
-  
+
   if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
   }
-  
+
   // 生成JWT密钥
   const jwtSecret = config.jwtSecret || crypto.randomBytes(32).toString('hex');
-  
+
   // 创建.env文件
   const envContent = `# 服务器配置
 PORT=${config.serverPort}
@@ -295,9 +313,9 @@ LOG_FILE=logs/app.log
 # 系统配置
 SYSTEM_INSTALLED=true
 `;
-  
-  fs.writeFileSync(path.join(__dirname, '../.env'), envContent);
-  
+
+  fs.writeFileSync(path.join(SERVICE_ROOT, '.env'), envContent);
+
   // 创建系统配置文件
   const systemConfig = {
     installed: true,
@@ -313,49 +331,49 @@ SYSTEM_INSTALLED=true
       email: config.adminEmail
     }
   };
-  
+
   fs.writeFileSync(
     path.join(configDir, 'system.json'),
     JSON.stringify(systemConfig, null, 2)
   );
-  
+
   console.log('配置文件创建成功');
 };
 
-const install = async () => {
+const install = async (): Promise<void> => {
   try {
-    const answers = await inquirer.prompt(questions);
-    
+    const answers = (await inquirer.prompt(questions)) as InstallConfig;
+
     // 验证密码确认
     if (answers.adminPassword !== answers.confirmPassword) {
       console.log('\n❌ 密码确认不匹配，请重新运行安装脚本');
       process.exit(1);
     }
-    
+
     console.log('\n开始安装抽奖系统...\n');
-    
+
     // 测试数据库连接
     console.log('正在测试数据库连接...');
     try {
       const testConnection = await mysql.createConnection({
         host: answers.dbHost,
-        port: answers.dbPort,
+        port: Number(answers.dbPort),
         user: answers.dbUser,
         password: answers.dbPassword
       });
       await testConnection.end();
       console.log('数据库连接测试成功');
-    } catch (error) {
+    } catch (error: any) {
       console.log(`❌ 数据库连接失败: ${error.message}`);
       process.exit(1);
     }
-    
+
     // 执行安装步骤
     await createDatabase(answers);
     await createTables(answers);
     await createSuperAdmin(answers);
     createConfigFiles(answers);
-    
+
     console.log('\n🎉 抽奖系统安装完成！\n');
     console.log('现在可以启动系统：');
     console.log('  npm start     # 生产模式启动');
@@ -365,15 +383,15 @@ const install = async () => {
     console.log(`  邮箱: ${answers.adminEmail}`);
     console.log(`\n访问地址: http://localhost:${answers.serverPort}`);
     console.log('=========================\n');
-    
-  } catch (error) {
+
+  } catch (error: any) {
     console.error('\n❌ 安装过程中发生错误:', error.message);
     process.exit(1);
   }
 };
 
 // 检查是否已安装
-const configPath = path.join(__dirname, '../config/system.json');
+const configPath = path.join(SERVICE_ROOT, 'config', 'system.json');
 if (fs.existsSync(configPath)) {
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   if (config.installed) {
@@ -384,4 +402,4 @@ if (fs.existsSync(configPath)) {
 }
 
 // 开始安装
-install(); 
+install();

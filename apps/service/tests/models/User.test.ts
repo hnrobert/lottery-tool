@@ -1,6 +1,9 @@
-const bcrypt = require('bcryptjs');
+import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize';
+import TestUtils from '../helpers/testUtils';
+
+// dist 为编译产物（无 .d.ts），保持 require 以获得宽松类型
 const { User } = require('../../dist/models');
-const TestUtils = require('../helpers/testUtils');
 
 describe('User模型测试', () => {
   afterEach(async () => {
@@ -8,7 +11,7 @@ describe('User模型测试', () => {
     await User.destroy({
       where: {
         username: {
-          [require('sequelize').Op.like]: 'test%'
+          [Op.like]: 'test%'
         }
       }
     });
@@ -93,7 +96,7 @@ describe('User模型测试', () => {
   });
 
   describe('用户查询', () => {
-    let testUser;
+    let testUser: any;
 
     beforeEach(async () => {
       testUser = await User.create({
@@ -144,14 +147,14 @@ describe('User模型测试', () => {
       });
 
       expect(Array.isArray(adminUsers)).toBe(true);
-      adminUsers.forEach(user => {
+      adminUsers.forEach((user: any) => {
         expect(user.role).toBe('admin');
       });
     });
   });
 
   describe('用户更新', () => {
-    let testUser;
+    let testUser: any;
 
     beforeEach(async () => {
       testUser = await User.create({
@@ -203,7 +206,7 @@ describe('User模型测试', () => {
   });
 
   describe('用户删除', () => {
-    let testUser;
+    let testUser: any;
 
     beforeEach(async () => {
       testUser = await User.create({
@@ -243,7 +246,7 @@ describe('User模型测试', () => {
       const deletedCount = await User.destroy({
         where: {
           username: {
-            [require('sequelize').Op.like]: 'testuser1%'
+            [Op.like]: 'testuser1%'
           }
         }
       });
@@ -253,7 +256,7 @@ describe('User模型测试', () => {
   });
 
   describe('用户实例方法', () => {
-    let testUser;
+    let testUser: any;
 
     beforeEach(async () => {
       testUser = await User.create({
@@ -300,4 +303,4 @@ describe('User模型测试', () => {
       expect(user).toBeDefined();
     });
   });
-}); 
+});
