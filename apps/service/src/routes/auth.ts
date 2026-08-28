@@ -1,11 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
-import bcrypt from 'bcryptjs';
+
 import { generateToken, authenticateToken, requireSuperAdmin } from '../middleware/auth';
 import { logAuthOperation } from '../middleware/operationLogger';
 import { createError } from '../utils/customError';
-import User from '../models/User';
-import OperationLog from '../models/OperationLog';
+import * as UserService from '../services/user.service';
+import { OPERATION_TYPES } from '../services/operation-log.service';
 
 const router = express.Router();
 
@@ -37,19 +37,19 @@ router.post('/login', [
     .withMessage('密码至少6个字符')
 ],
 validateRequest,
-logAuthOperation(OperationLog.OPERATION_TYPES.USER_LOGIN),
+logAuthOperation(OPERATION_TYPES.USER_LOGIN),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { username, password } = req.body;
 
     // 查找用户
-    const user = await User.findByUsername(username);
+    const user = await UserService.findByUsername(username);
     if (!user) {
       throw createError('AUTH_INVALID_CREDENTIALS');
     }
 
     // 验证密码
-    const isValidPassword = await user.validatePassword(password);
+    const isValidPassword = await UserService.validatePassword(user, password);
     if (!isValidPassword) {
       throw createError('AUTH_INVALID_CREDENTIALS');
     }
@@ -66,7 +66,7 @@ async (req: Request, res: Response, next: NextFunction) => {
       success: true,
       data: {
         token,
-        user: user.toSafeJSON()
+        user: UserService.toSafeUser(user)
       },
       message: '登录成功'
     });
@@ -108,25 +108,25 @@ router.post('/register', [
     .withMessage('角色只能是admin或super_admin')
 ],
 validateRequest,
-logAuthOperation(OperationLog.OPERATION_TYPES.USER_REGISTER),
+logAuthOperation(OPERATION_TYPES.USER_REGISTER),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { username, email, password, role } = req.body;
 
     // 检查用户名是否已存在
-    const existingUser = await User.findByUsername(username);
+    const existingUser = await UserService.findByUsername(username);
     if (existingUser) {
       throw createError('VALIDATION_DUPLICATE_DATA', '用户名已存在');
     }
 
     // 检查邮箱是否已存在
-    const existingEmail = await User.findOne({ where: { email } });
+    const existingEmail = await UserService.findByEmail(email);
     if (existingEmail) {
       throw createError('VALIDATION_DUPLICATE_DATA', '邮箱已存在');
     }
 
     // 创建用户
-    const newUser = await User.createUser({
+    const newUser = await UserService.createUser({
       username,
       email,
       password,
@@ -136,7 +136,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     res.status(201).json({
       success: true,
       data: {
-        user: newUser.toSafeJSON()
+        user: UserService.toSafeUser(newUser)
       },
       message: '用户创建成功'
     });
@@ -155,7 +155,7 @@ authenticateToken,
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     // 重新从数据库获取用户信息，确保数据最新
-    const user = await User.findByPk((req as any).user.id);
+    const user = await UserService.findById((req as any).user.id);
     if (!user) {
       throw createError('AUTH_TOKEN_INVALID', '用户不存在');
     }
@@ -163,7 +163,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     res.json({
       success: true,
       data: {
-        user: user.toSafeJSON()
+        user: UserService.toSafeUser(user)
       }
     });
   } catch (error) {
@@ -190,32 +190,31 @@ router.put('/password', [
     .withMessage('新密码必须包含字母和数字')
 ],
 validateRequest,
-logAuthOperation(OperationLog.OPERATION_TYPES.PASSWORD_CHANGE),
+logAuthOperation(OPERATION_TYPES.PASSWORD_CHANGE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { old_password, new_password } = req.body;
 
     // 获取当前用户
-    const user = await User.findByPk((req as any).user.id);
+    const user = await UserService.findById((req as any).user.id);
     if (!user) {
       throw createError('AUTH_TOKEN_INVALID', '用户不存在');
     }
 
     // 验证原密码
-    const isValidOldPassword = await user.validatePassword(old_password);
+    const isValidOldPassword = await UserService.validatePassword(user, old_password);
     if (!isValidOldPassword) {
       throw createError('AUTH_INVALID_CREDENTIALS', '原密码错误');
     }
 
     // 检查新密码是否与原密码相同
-    const isSamePassword = await user.validatePassword(new_password);
+    const isSamePassword = await UserService.validatePassword(user, new_password);
     if (isSamePassword) {
       throw createError('VALIDATION_INVALID_FORMAT', '新密码不能与原密码相同');
     }
 
     // 更新密码
-    await user.setPassword(new_password);
-    await user.save();
+    await UserService.updatePassword(user, new_password);
 
     res.json({
       success: true,
@@ -233,7 +232,7 @@ async (req: Request, res: Response, next: NextFunction) => {
  */
 router.post('/logout',
 authenticateToken,
-logAuthOperation(OperationLog.OPERATION_TYPES.USER_LOGOUT),
+logAuthOperation(OPERATION_TYPES.USER_LOGOUT),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     // 这里可以实现token黑名单功能

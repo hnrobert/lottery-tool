@@ -2,7 +2,7 @@
 
 🌍 中文版 | [English](README.md)
 
-一个支持多种抽奖模式的完整抽奖系统后端服务，基于 Node.js + Express.js + MySQL 构建。
+一个支持多种抽奖模式的完整抽奖系统后端服务，基于 Node.js + Express.js + PostgreSQL 构建。
 提供符合OpenAPI规范的json协议文档，方便前端开发人员查看和测试API。
 
 ## 功能特点
@@ -17,8 +17,8 @@
 ## 技术栈
 
 - **后端框架**：Node.js + Express.js
-- **数据库**：MySQL 8.0+
-- **ORM**：Sequelize
+- **数据库**：PostgreSQL 16+
+- **ORM**：TypeORM 1.1
 - **认证**：JWT
 - **日志**：Winston
 - **验证**：express-validator
@@ -28,7 +28,7 @@
 ### 1. 环境要求
 
 - Node.js >= 16.0.0
-- MySQL >= 8.0
+- PostgreSQL >= 16
 - npm 或 yarn
 
 ### 2. 安装依赖
@@ -211,7 +211,7 @@ NODE_ENV=production
 
 # 数据库配置
 DB_HOST=localhost
-DB_PORT=3306
+DB_PORT=5432
 DB_NAME=lottery_system
 DB_USER=root
 DB_PASSWORD=your_password
@@ -297,7 +297,7 @@ docker run -d \
 
 可选的环境变量：
 
-- `DB_PORT`: 数据库端口（默认：3306）
+- `DB_PORT`: 数据库端口（默认：5432）
 - `PORT`: 应用端口（默认：3000）
 - `NODE_ENV`: 环境（默认：production）
 - `CORS_ORIGIN`: CORS来源（默认：*）
@@ -327,6 +327,25 @@ docker logs lottery-backend
 
 
 ## 开发说明
+
+### 数据库迁移（TypeORM + PostgreSQL）
+
+表结构由 `src/entities/` 实体定义，通过自动生成的迁移（`src/migrations/`）管理，`synchronize` 始终关闭。服务启动时会自动应用未执行的迁移。
+
+```bash
+# 改动实体后，生成迁移（diff 实体与数据库），然后把新类注册进 src/migrations/index.ts
+pnpm migration:generate --name=AddUserAvatar
+
+# 应用 / 回滚一步迁移
+pnpm migration:run
+pnpm migration:revert
+
+# commit 守卫：实体改动必须伴随已注册的新迁移（提交信息含 "bypass migration check" 可跳过）
+pnpm migration:check
+```
+
+约定：迁移文件为 `<时间戳>-<PascalName>.ts`（up/down 执行 SQL 数组）；生成产物需人工审查（生成器已自动按「约束→索引→表→类型」重排 down 语句）。
+
 ### 添加新的抽奖码格式
 
 1. 在 `src/utils/lotteryCodeGenerator.ts` 中添加新格式

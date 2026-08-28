@@ -1,14 +1,15 @@
 import inquirer from 'inquirer';
-import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
+import { Client } from 'pg';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import 'dotenv/config';
 
 console.log('\n=== 抽奖系统安装向导 ===\n');
 
-// 本脚本经 tsx 直接运行，__dirname 即源码 scripts/ 目录
-const SERVICE_ROOT = path.resolve(__dirname, '..');
+// 本脚本经 tsup 构建为 scripts/dist/install.js，向上两级回到服务根目录
+const SERVICE_ROOT = path.resolve(import.meta.dirname, '../..');
 
 // 安装向导收集的配置
 interface InstallConfig {
@@ -36,7 +37,7 @@ const questions = [
     type: 'input',
     name: 'dbPort',
     message: '请输入数据库端口:',
-    default: '3306',
+    default: '5432',
     validate: (value: string) => {
       const port = parseInt(value);
       return (port > 0 && port < 65536) || '请输入有效的端口号';
@@ -46,7 +47,7 @@ const questions = [
     type: 'input',
     name: 'dbUser',
     message: '请输入数据库用户名:',
-    default: 'root'
+    default: 'postgres'
   },
   {
     type: 'password',
@@ -108,165 +109,70 @@ const questions = [
   }
 ];
 
+// 连接到 PostgreSQL 维护库（postgres）执行建库语句
 const createDatabase = async (config: InstallConfig): Promise<void> => {
   console.log('\n正在创建数据库...');
 
-  // 先连接MySQL（不指定数据库）
-  const connection = await mysql.createConnection({
-    host: config.dbHost,
-    port: Number(config.dbPort),
-    user: config.dbUser,
-    password: config.dbPassword
-  });
+  if (!/^[A-Za-z0-9_]+$/.test(config.dbName)) {
+    throw new Error('数据库名称只能包含字母、数字和下划线');
+  }
 
-  // 创建数据库
-  await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${config.dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  console.log(`数据库 ${config.dbName} 创建成功`);
-
-  await connection.end();
-};
-
-const createTables = async (config: InstallConfig): Promise<void> => {
-  console.log('\n正在创建数据表...');
-
-  const connection = await mysql.createConnection({
+  const client = new Client({
     host: config.dbHost,
     port: Number(config.dbPort),
     user: config.dbUser,
     password: config.dbPassword,
-    database: config.dbName
+    database: 'postgres'
   });
+  await client.connect();
 
-  // 创建用户表
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      username VARCHAR(50) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      email VARCHAR(100),
-      role ENUM('super_admin', 'admin') DEFAULT 'admin',
-      status ENUM('active', 'inactive') DEFAULT 'active',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  // 创建活动表
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS activities (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      name VARCHAR(100) NOT NULL,
-      description TEXT,
-      lottery_mode ENUM('offline', 'online') NOT NULL,
-      start_time DATETIME,
-      end_time DATETIME,
-      status ENUM('draft', 'active', 'ended') DEFAULT 'draft',
-      settings JSON COMMENT '活动设置：max_lottery_codes, lottery_code_format, allow_duplicate_phone等',
-      webhook_id VARCHAR(50) UNIQUE COMMENT 'Webhook唯一标识',
-      webhook_token VARCHAR(255) COMMENT 'Webhook访问token',
-      created_by INT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (created_by) REFERENCES users(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  // 创建奖品表
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS prizes (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      activity_id INT NOT NULL,
-      name VARCHAR(100) NOT NULL,
-      description TEXT,
-      total_quantity INT NOT NULL DEFAULT 0,
-      remaining_quantity INT NOT NULL DEFAULT 0,
-      probability DECIMAL(5,4) NOT NULL,
-      sort_order INT DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  // 创建抽奖码表
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS lottery_codes (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      activity_id INT NOT NULL,
-      code VARCHAR(50) NOT NULL,
-      status ENUM('unused', 'used') DEFAULT 'unused',
-      participant_info JSON COMMENT '参与者信息：name, phone, email等',
-      used_at TIMESTAMP NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY unique_activity_code (activity_id, code),
-      FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  // 创建抽奖记录表
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS lottery_records (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      activity_id INT NOT NULL,
-      lottery_code_id INT NOT NULL,
-      prize_id INT NULL,
-      is_winner BOOLEAN DEFAULT FALSE,
-      operator_id INT NULL COMMENT '线下抽奖时的操作员ID',
-      ip_address VARCHAR(45),
-      user_agent TEXT,
-      signature_key VARCHAR(512) COMMENT '签字图片在COS中的对象键',
-      signature_url TEXT COMMENT '签字图片访问URL',
-      signed_at DATETIME COMMENT '签字时间',
-      signature_status ENUM('unsigned', 'signed') DEFAULT 'unsigned' COMMENT '签字状态',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-      FOREIGN KEY (lottery_code_id) REFERENCES lottery_codes(id) ON DELETE CASCADE,
-      FOREIGN KEY (prize_id) REFERENCES prizes(id) ON DELETE SET NULL,
-      FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  // 创建操作日志表
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS operation_logs (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      user_id INT,
-      operation_type VARCHAR(50) NOT NULL,
-      operation_detail TEXT,
-      target_type VARCHAR(50),
-      target_id INT,
-      ip_address VARCHAR(45),
-      user_agent TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  console.log('数据表创建成功');
-  await connection.end();
+  try {
+    const exists = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [
+      config.dbName
+    ]);
+    if (exists.rowCount === 0) {
+      await client.query(`CREATE DATABASE "${config.dbName}"`);
+      console.log(`数据库 ${config.dbName} 创建成功`);
+    } else {
+      console.log(`数据库 ${config.dbName} 已存在，跳过创建`);
+    }
+  } finally {
+    await client.end();
+  }
 };
 
+// 通过迁移建表并创建超级管理员
 const createSuperAdmin = async (config: InstallConfig): Promise<void> => {
-  console.log('\n正在创建超级管理员账户...');
+  console.log('\n正在应用数据库迁移...');
 
-  const connection = await mysql.createConnection({
-    host: config.dbHost,
-    port: Number(config.dbPort),
-    user: config.dbUser,
-    password: config.dbPassword,
-    database: config.dbName
-  });
+  // 在导入 DataSource 模块前注入连接信息（模块加载时读取环境变量）
+  process.env.DB_HOST = config.dbHost;
+  process.env.DB_PORT = config.dbPort;
+  process.env.DB_USER = config.dbUser;
+  process.env.DB_PASSWORD = config.dbPassword;
+  process.env.DB_NAME = config.dbName;
 
-  const passwordHash = await bcrypt.hash(config.adminPassword, 12);
+  const { initDataSource, closeDataSource, AppDataSource } = await import('../src/utils/database');
+  const { User } = await import('../src/entities');
 
-  await connection.execute(
-    'INSERT INTO users (username, password_hash, email, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
-    [config.adminUsername, passwordHash, config.adminEmail, 'super_admin']
-  );
+  try {
+    await initDataSource();
 
-  console.log(`超级管理员账户 ${config.adminUsername} 创建成功`);
-  await connection.end();
+    console.log('正在创建超级管理员账户...');
+    const passwordHash = await bcrypt.hash(config.adminPassword, 12);
+
+    await AppDataSource.getRepository(User).insert({
+      username: config.adminUsername,
+      password_hash: passwordHash,
+      email: config.adminEmail,
+      role: 'super_admin',
+      status: 'active'
+    });
+
+    console.log(`超级管理员账户 ${config.adminUsername} 创建成功`);
+  } finally {
+    await closeDataSource();
+  }
 };
 
 const createConfigFiles = (config: InstallConfig): void => {
@@ -292,7 +198,7 @@ const createConfigFiles = (config: InstallConfig): void => {
 PORT=${config.serverPort}
 NODE_ENV=production
 
-# 数据库配置
+# 数据库配置（PostgreSQL）
 DB_HOST=${config.dbHost}
 DB_PORT=${config.dbPort}
 DB_NAME=${config.dbName}
@@ -322,6 +228,7 @@ SYSTEM_INSTALLED=true
     installTime: new Date().toISOString(),
     version: '1.0.0',
     database: {
+      type: 'postgres',
       host: config.dbHost,
       port: config.dbPort,
       name: config.dbName
@@ -352,38 +259,38 @@ const install = async (): Promise<void> => {
 
     console.log('\n开始安装抽奖系统...\n');
 
-    // 测试数据库连接
+    // 测试数据库连接（连维护库）
     console.log('正在测试数据库连接...');
     try {
-      const testConnection = await mysql.createConnection({
+      const testClient = new Client({
         host: answers.dbHost,
         port: Number(answers.dbPort),
         user: answers.dbUser,
-        password: answers.dbPassword
+        password: answers.dbPassword,
+        database: 'postgres'
       });
-      await testConnection.end();
+      await testClient.connect();
+      await testClient.end();
       console.log('数据库连接测试成功');
     } catch (error: any) {
       console.log(`❌ 数据库连接失败: ${error.message}`);
       process.exit(1);
     }
 
-    // 执行安装步骤
+    // 执行安装步骤：建库 → 迁移建表 + 超管 → 配置文件
     await createDatabase(answers);
-    await createTables(answers);
     await createSuperAdmin(answers);
     createConfigFiles(answers);
 
     console.log('\n🎉 抽奖系统安装完成！\n');
     console.log('现在可以启动系统：');
-    console.log('  npm start     # 生产模式启动');
-    console.log('  npm run dev   # 开发模式启动');
+    console.log('  pnpm start    # 生产模式启动');
+    console.log('  pnpm dev      # 开发模式启动');
     console.log('\n超级管理员账户信息：');
     console.log(`  用户名: ${answers.adminUsername}`);
     console.log(`  邮箱: ${answers.adminEmail}`);
     console.log(`\n访问地址: http://localhost:${answers.serverPort}`);
     console.log('=========================\n');
-
   } catch (error: any) {
     console.error('\n❌ 安装过程中发生错误:', error.message);
     process.exit(1);

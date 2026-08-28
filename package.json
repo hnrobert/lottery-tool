@@ -10,7 +10,8 @@
     "build": "pnpm --filter @lottery-tool/web build",
     "start:service": "pnpm --filter @lottery-tool/service start",
     "lint": "pnpm --filter @lottery-tool/web lint",
-    "test": "pnpm --filter @lottery-tool/service test"
+    "test": "pnpm --filter @lottery-tool/service test",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=20"
@@ -22,5 +23,8 @@
       "unrs-resolver",
       "vue-demi"
     ]
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }

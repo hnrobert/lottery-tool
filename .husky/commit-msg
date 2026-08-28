@@ -1,0 +1,2 @@
+# 实体改动必须伴随已注册的新迁移（含 "bypass migration check" 的提交信息可跳过）
+pnpm --filter @lottery-tool/service run --silent migration:check "$1"

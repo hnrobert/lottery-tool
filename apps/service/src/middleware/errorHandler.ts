@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { QueryFailedError } from 'typeorm';
 import logger from '../utils/logger';
 
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
@@ -14,42 +15,47 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     userAgent: req.get('User-Agent')
   });
 
-  // Sequelize 验证错误
-  if (err.name === 'SequelizeValidationError') {
-    const message = err.errors.map((val: any) => val.message).join(', ');
+  // PostgreSQL 驱动错误（按 SQLSTATE 分类）
+  if (err instanceof QueryFailedError || err.code?.startsWith?.('2') || err.code?.startsWith?.('23')) {
+    const pgCode = (err as any).code as string | undefined;
+    const constraint: string | undefined = (err as any).constraint;
+
+    // 唯一约束冲突（23505）
+    if (pgCode === '23505') {
+      // constraint 形如 uq_users_username；从 detail 里取 'Key (username)=(...)' 更直观
+      const detail: string | undefined = (err as any).detail;
+      const field = detail?.match(/Key \((\w+)\)/)?.[1] ?? constraint ?? '字段';
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'DUPLICATE_ERROR',
+          message: `${field} 已存在`,
+          details: '数据重复'
+        }
+      });
+      return;
+    }
+
+    // 外键约束失败（23503）
+    if (pgCode === '23503') {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'FOREIGN_KEY_ERROR',
+          message: '关联数据不存在',
+          details: '外键约束失败'
+        }
+      });
+      return;
+    }
+
+    // 其他查询/数据错误（如 22P02 枚举非法值、23502 非空约束）归为验证失败
     res.status(400).json({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
         message: '数据验证失败',
-        details: message
-      }
-    });
-    return;
-  }
-
-  // Sequelize 唯一约束错误
-  if (err.name === 'SequelizeUniqueConstraintError') {
-    const field = err.errors[0].path;
-    res.status(400).json({
-      success: false,
-      error: {
-        code: 'DUPLICATE_ERROR',
-        message: `${field} 已存在`,
-        details: '数据重复'
-      }
-    });
-    return;
-  }
-
-  // Sequelize 外键约束错误
-  if (err.name === 'SequelizeForeignKeyConstraintError') {
-    res.status(400).json({
-      success: false,
-      error: {
-        code: 'FOREIGN_KEY_ERROR',
-        message: '关联数据不存在',
-        details: '外键约束失败'
+        details: err.message
       }
     });
     return;

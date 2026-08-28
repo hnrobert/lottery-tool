@@ -3,12 +3,15 @@ import { body, validationResult } from 'express-validator';
 import { optionalAuth, authenticateToken, requireAdmin } from '../middleware/auth';
 import { logLotteryDraw } from '../middleware/operationLogger';
 import { createError } from '../utils/customError';
-import { sequelize } from '../config/database';
-import Activity from '../models/Activity';
-import LotteryCode from '../models/LotteryCode';
-import Prize from '../models/Prize';
-import LotteryRecord from '../models/LotteryRecord';
-import OperationLog from '../models/OperationLog';
+import { AppDataSource } from '../utils/database';
+import { Activity } from '../entities/activity.entity';
+import { LotteryRecord } from '../entities/lottery-record.entity';
+import { Prize } from '../entities/prize.entity';
+import * as ActivityService from '../services/activity.service';
+import * as LotteryCodeService from '../services/lottery-code.service';
+import * as PrizeService from '../services/prize.service';
+import * as LotteryRecordService from '../services/lottery-record.service';
+import { OPERATION_TYPES } from '../services/operation-log.service';
 import * as cosClient from '../utils/cosClient';
 import { isCosConfigured, getCosConfig } from '../utils/systemConfig';
 
@@ -32,25 +35,17 @@ router.get('/activities/:id', async (req: Request, res: Response, next: NextFunc
   try {
     const activityId = req.params.id;
 
-    const activity = await Activity.findByPk(activityId, {
-      include: [
-        {
-          model: Prize,
-          as: 'prizes',
-          attributes: ['id', 'name', 'description', 'total_quantity'],
-          order: [['sort_order', 'ASC']]
-        }
-      ]
-    });
+    const activity = await ActivityService.findById(parseInt(activityId));
 
     if (!activity) {
       throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
     }
 
-    // 只返回公开信息
-    const lotteryCodesCount = await LotteryCode.count({
-      where: { activity_id: activityId }
-    });
+    // 只返回公开信息（奖品按 sort_order 排序，只取公开字段）
+    const [prizes, lotteryCodesCount] = await Promise.all([
+      PrizeService.findByActivity(parseInt(activityId)),
+      LotteryCodeService.countByActivity(parseInt(activityId)),
+    ]);
 
     res.json({
       success: true,
@@ -67,7 +62,12 @@ router.get('/activities/:id', async (req: Request, res: Response, next: NextFunc
             require_signature: activity.settings?.require_signature === true
           }
         },
-        prizes: (activity as any).prizes,
+        prizes: prizes.map((prize) => ({
+          id: prize.id,
+          name: prize.name,
+          description: prize.description,
+          total_quantity: prize.total_quantity
+        })),
         lottery_codes_count: lotteryCodesCount
       }
     });
@@ -89,114 +89,118 @@ router.post('/activities/:id/draw', [
     .withMessage('抽奖码长度不正确')
 ],
 validateRequest,
-logLotteryDraw(OperationLog.OPERATION_TYPES.ONLINE_LOTTERY),
+logLotteryDraw(OPERATION_TYPES.ONLINE_LOTTERY),
 async (req: Request, res: Response, next: NextFunction) => {
-  const transaction = await sequelize.transaction();
-
   try {
     const activityId = req.params.id;
     const { lottery_code } = req.body;
 
-    // 查找活动
-    const activity = await Activity.findByPk(activityId, { transaction });
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    // 检查活动是否可以抽奖
-    const canStart = activity.canStartLottery();
-    if (!canStart.canStart) {
-      throw createError('BUSINESS_ACTIVITY_NOT_STARTED', canStart.reason);
-    }
-
-    // 查找抽奖码
-    const lotteryCodeRecord = await LotteryCode.findByActivityAndCode(
-      parseInt(activityId),
-      lottery_code
-    );
-    if (!lotteryCodeRecord) {
-      throw createError(
-        'BUSINESS_LOTTERY_CODE_NOT_FOUND',
-        '抽奖码不存在或不属于此活动'
-      );
-    }
-
-    // 检查抽奖码是否已使用
-    if (lotteryCodeRecord.isUsed()) {
-      throw createError('BUSINESS_LOTTERY_CODE_USED');
-    }
-
-    // 检查是否已经抽过奖
-    const existingRecord = await LotteryRecord.findOne({
-      where: { lottery_code_id: lotteryCodeRecord.id },
-      transaction
-    });
-
-    if (existingRecord) {
-      throw createError('BUSINESS_LOTTERY_CODE_USED', '该抽奖码已参与过抽奖');
-    }
-
-    // 执行抽奖逻辑
-    let isWinner = false;
-    let selectedPrize: Prize | null = null;
-
-    // 根据概率选择奖品（内部会处理总和>1抛错，总和<1可能未中奖）
-    const selectedPrizeRecord = await Prize.selectByProbability(parseInt(activityId), activity);
-
-    if (selectedPrizeRecord && selectedPrizeRecord.hasStock()) {
-      isWinner = true;
-      selectedPrize = selectedPrizeRecord;
-
-      // 扣减库存（在事务中）
-      await selectedPrize.deductStock(1, { transaction });
-    } else {
-      isWinner = false;
-      selectedPrize = null;
-    }
-
-    // 标记抽奖码为已使用（在事务中）
-    await lotteryCodeRecord.markAsUsed({ transaction });
-
-    // 创建抽奖记录（在事务中）
-    const lotteryRecord = await LotteryRecord.createRecord({
-      activity_id: parseInt(activityId),
-      lottery_code_id: lotteryCodeRecord.id,
-      prize_id: selectedPrize ? selectedPrize.id : null,
-      is_winner: isWinner,
-      ip_address: req.ip,
-      user_agent: req.get('User-Agent')
-    }, { transaction });
-
-    await transaction.commit();
-
-    // 准备响应数据
-    const responseData: Record<string, unknown> = {
-      is_winner: isWinner,
-      lottery_record: {
-        id: lotteryRecord.id,
-        created_at: lotteryRecord.created_at
-      },
-      lottery_code: {
-        code: lotteryCodeRecord.code,
-        participant_info: lotteryCodeRecord.getParticipantInfo()
+    // 整个抽奖流程在单个事务中（异常自动回滚）
+    const { responseData, message } = await AppDataSource.transaction(async (manager) => {
+      // 查找活动
+      const activity = await manager.getRepository(Activity).findOneBy({ id: parseInt(activityId) });
+      if (!activity) {
+        throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
       }
-    };
 
-    if (isWinner && selectedPrize) {
-      responseData.prize = {
-        id: selectedPrize.id,
-        name: selectedPrize.name,
-        description: selectedPrize.description
+      // 检查活动是否可以抽奖
+      const canStart = ActivityService.canStartLottery(activity);
+      if (!canStart.canStart) {
+        throw createError('BUSINESS_ACTIVITY_NOT_STARTED', canStart.reason);
+      }
+
+      // 查找抽奖码
+      const lotteryCodeRecord = await LotteryCodeService.findByActivityAndCode(
+        parseInt(activityId),
+        lottery_code,
+        manager,
+      );
+      if (!lotteryCodeRecord) {
+        throw createError(
+          'BUSINESS_LOTTERY_CODE_NOT_FOUND',
+          '抽奖码不存在或不属于此活动'
+        );
+      }
+
+      // 检查抽奖码是否已使用
+      if (lotteryCodeRecord.status === 'used') {
+        throw createError('BUSINESS_LOTTERY_CODE_USED');
+      }
+
+      // 检查是否已经抽过奖
+      const existingRecord = await manager.getRepository(LotteryRecord).findOneBy({
+        lottery_code_id: lotteryCodeRecord.id,
+      } as any);
+
+      if (existingRecord) {
+        throw createError('BUSINESS_LOTTERY_CODE_USED', '该抽奖码已参与过抽奖');
+      }
+
+      // 执行抽奖逻辑
+      let isWinner = false;
+      let selectedPrize: Prize | null = null;
+
+      // 根据概率选择奖品（内部会处理总和>1抛错，总和<1可能未中奖）
+      const selectedPrizeRecord = await PrizeService.selectByProbability(
+        parseInt(activityId),
+        activity,
+        { manager },
+      );
+
+      if (selectedPrizeRecord && selectedPrizeRecord.remaining_quantity > 0) {
+        isWinner = true;
+        selectedPrize = selectedPrizeRecord;
+
+        // 扣减库存（在事务中）
+        await PrizeService.deductStock(selectedPrize, 1, manager);
+      } else {
+        isWinner = false;
+        selectedPrize = null;
+      }
+
+      // 标记抽奖码为已使用（在事务中）
+      await LotteryCodeService.markAsUsed(lotteryCodeRecord, manager);
+
+      // 创建抽奖记录（在事务中）
+      const lotteryRecord = await LotteryRecordService.createRecord({
+        activity_id: parseInt(activityId),
+        lottery_code_id: lotteryCodeRecord.id,
+        prize_id: selectedPrize ? selectedPrize.id : null,
+        is_winner: isWinner,
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent')
+      }, manager);
+
+      // 准备响应数据
+      const responseData: Record<string, unknown> = {
+        is_winner: isWinner,
+        lottery_record: {
+          id: lotteryRecord.id,
+          created_at: lotteryRecord.created_at
+        },
+        lottery_code: {
+          code: lotteryCodeRecord.code,
+          participant_info: lotteryCodeRecord.participant_info || {}
+        }
       };
-    }
+
+      if (isWinner && selectedPrize) {
+        responseData.prize = {
+          id: selectedPrize.id,
+          name: selectedPrize.name,
+          description: selectedPrize.description
+        };
+      }
+
+      return { responseData, message: isWinner ? '恭喜您中奖了！' : '很遗憾，您没有中奖' };
+    });
 
     res.json({
       success: true,
       data: responseData,
-      message: isWinner ? '恭喜您中奖了！' : '很遗憾，您没有中奖'
+      message
     });
   } catch (error) {
-    await transaction.rollback();
     next(error);
   }
 });
@@ -220,127 +224,130 @@ router.post('/activities/:id/offline-draw', [
     .withMessage('奖品ID必须是正整数')
 ],
 validateRequest,
-logLotteryDraw(OperationLog.OPERATION_TYPES.OFFLINE_LOTTERY),
+logLotteryDraw(OPERATION_TYPES.OFFLINE_LOTTERY),
 async (req: Request, res: Response, next: NextFunction) => {
-  const transaction = await sequelize.transaction();
-
   try {
     const activityId = req.params.id;
     const { lottery_code, prize_id } = req.body;
 
-    // 查找活动
-    const activity = await Activity.findByPk(activityId, { transaction });
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
+    const { responseData, message } = await AppDataSource.transaction(async (manager) => {
+      // 查找活动
+      const activity = await manager.getRepository(Activity).findOneBy({ id: parseInt(activityId) });
+      if (!activity) {
+        throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
+      }
 
-    // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
+      // 检查用户权限
+      if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
+        throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
+      }
 
-    // 查找抽奖码
-    const lotteryCodeRecord = await LotteryCode.findByActivityAndCode(
-      parseInt(activityId),
-      lottery_code
-    );
-    if (!lotteryCodeRecord) {
-      throw createError(
-        'BUSINESS_LOTTERY_CODE_NOT_FOUND',
-        '抽奖码不存在或不属于此活动'
+      // 查找抽奖码
+      const lotteryCodeRecord = await LotteryCodeService.findByActivityAndCode(
+        parseInt(activityId),
+        lottery_code,
+        manager,
       );
-    }
-
-    // 检查抽奖码是否已使用
-    if (lotteryCodeRecord.isUsed()) {
-      throw createError('BUSINESS_LOTTERY_CODE_USED');
-    }
-
-    // 检查是否已经抽过奖
-    const existingRecord = await LotteryRecord.findOne({
-      where: { lottery_code_id: lotteryCodeRecord.id },
-      transaction
-    });
-
-    if (existingRecord) {
-      throw createError('BUSINESS_LOTTERY_CODE_USED', '该抽奖码已参与过抽奖');
-    }
-
-    let isWinner = false;
-    let selectedPrize: Prize | null = null;
-
-    // 如果指定了奖品ID，使用指定奖品
-    if (prize_id) {
-      const prize = await Prize.findByPk(prize_id, { transaction });
-      if (!prize || prize.activity_id !== parseInt(activityId)) {
-        throw createError('VALIDATION_INVALID_FORMAT', '奖品不存在或不属于此活动');
+      if (!lotteryCodeRecord) {
+        throw createError(
+          'BUSINESS_LOTTERY_CODE_NOT_FOUND',
+          '抽奖码不存在或不属于此活动'
+        );
       }
 
-      if (!prize.hasStock()) {
-        throw createError('BUSINESS_PRIZE_OUT_OF_STOCK');
+      // 检查抽奖码是否已使用
+      if (lotteryCodeRecord.status === 'used') {
+        throw createError('BUSINESS_LOTTERY_CODE_USED');
       }
 
-      isWinner = true;
-      selectedPrize = prize;
-      await selectedPrize.deductStock(1, { transaction });
-    } else {
-      // 使用概率抽奖
-      const selectedPrizeRecord = await Prize.selectByProbability(parseInt(activityId), activity);
+      // 检查是否已经抽过奖
+      const existingRecord = await manager.getRepository(LotteryRecord).findOneBy({
+        lottery_code_id: lotteryCodeRecord.id,
+      } as any);
 
-      if (selectedPrizeRecord && selectedPrizeRecord.hasStock()) {
+      if (existingRecord) {
+        throw createError('BUSINESS_LOTTERY_CODE_USED', '该抽奖码已参与过抽奖');
+      }
+
+      let isWinner = false;
+      let selectedPrize: Prize | null = null;
+
+      // 如果指定了奖品ID，使用指定奖品
+      if (prize_id) {
+        const prize = await manager.getRepository(Prize).findOneBy({ id: parseInt(prize_id) });
+        if (!prize || prize.activity_id !== parseInt(activityId)) {
+          throw createError('VALIDATION_INVALID_FORMAT', '奖品不存在或不属于此活动');
+        }
+
+        if (prize.remaining_quantity <= 0) {
+          throw createError('BUSINESS_PRIZE_OUT_OF_STOCK');
+        }
+
         isWinner = true;
-        selectedPrize = selectedPrizeRecord;
-        await selectedPrize.deductStock(1, { transaction });
+        selectedPrize = prize;
+        await PrizeService.deductStock(selectedPrize, 1, manager);
       } else {
-        isWinner = false;
-        selectedPrize = null;
+        // 使用概率抽奖
+        const selectedPrizeRecord = await PrizeService.selectByProbability(
+          parseInt(activityId),
+          activity,
+          { manager },
+        );
+
+        if (selectedPrizeRecord && selectedPrizeRecord.remaining_quantity > 0) {
+          isWinner = true;
+          selectedPrize = selectedPrizeRecord;
+          await PrizeService.deductStock(selectedPrize, 1, manager);
+        } else {
+          isWinner = false;
+          selectedPrize = null;
+        }
       }
-    }
 
-    // 标记抽奖码为已使用
-    await lotteryCodeRecord.markAsUsed({ transaction });
+      // 标记抽奖码为已使用
+      await LotteryCodeService.markAsUsed(lotteryCodeRecord, manager);
 
-    // 创建抽奖记录
-    const lotteryRecord = await LotteryRecord.createRecord({
-      activity_id: parseInt(activityId),
-      lottery_code_id: lotteryCodeRecord.id,
-      prize_id: selectedPrize ? selectedPrize.id : null,
-      is_winner: isWinner,
-      operator_id: (req as any).user.id,
-      ip_address: req.ip,
-      user_agent: req.get('User-Agent')
-    }, { transaction });
+      // 创建抽奖记录
+      const lotteryRecord = await LotteryRecordService.createRecord({
+        activity_id: parseInt(activityId),
+        lottery_code_id: lotteryCodeRecord.id,
+        prize_id: selectedPrize ? selectedPrize.id : null,
+        is_winner: isWinner,
+        operator_id: (req as any).user.id,
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent')
+      }, manager);
 
-    await transaction.commit();
-
-    // 准备响应数据
-    const responseData: Record<string, unknown> = {
-      is_winner: isWinner,
-      lottery_record: {
-        id: lotteryRecord.id,
-        created_at: lotteryRecord.created_at
-      },
-      lottery_code: {
-        code: lotteryCodeRecord.code,
-        participant_info: lotteryCodeRecord.getParticipantInfo()
-      }
-    };
-
-    if (isWinner && selectedPrize) {
-      responseData.prize = {
-        id: selectedPrize.id,
-        name: selectedPrize.name,
-        description: selectedPrize.description
+      // 准备响应数据
+      const responseData: Record<string, unknown> = {
+        is_winner: isWinner,
+        lottery_record: {
+          id: lotteryRecord.id,
+          created_at: lotteryRecord.created_at
+        },
+        lottery_code: {
+          code: lotteryCodeRecord.code,
+          participant_info: lotteryCodeRecord.participant_info || {}
+        }
       };
-    }
+
+      if (isWinner && selectedPrize) {
+        responseData.prize = {
+          id: selectedPrize.id,
+          name: selectedPrize.name,
+          description: selectedPrize.description
+        };
+      }
+
+      return { responseData, message: isWinner ? '抽奖成功，参与者中奖！' : '很遗憾未中奖' };
+    });
 
     res.json({
       success: true,
       data: responseData,
-      message: isWinner ? '抽奖成功，参与者中奖！' : '很遗憾未中奖'
+      message
     });
   } catch (error) {
-    await transaction.rollback();
     next(error);
   }
 });
@@ -372,7 +379,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // 查找活动
-    const activity = await Activity.findByPk(activityId);
+    const activity = await ActivityService.findById(activityId);
     if (!activity) {
       throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
     }
@@ -383,7 +390,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // 查找抽奖记录
-    const record = await LotteryRecord.findByPk(recordId);
+    const record = await LotteryRecordService.findById(recordId);
     if (!record) {
       throw createError('BUSINESS_LOTTERY_RECORD_NOT_FOUND', '抽奖记录不存在');
     }
@@ -424,7 +431,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     const signatureUrl = cosClient.buildPublicUrl(objectKey);
 
     // 更新记录
-    await LotteryRecord.updateSignature(recordId, {
+    await LotteryRecordService.updateSignature(recordId, {
       signature_key: objectKey,
       signature_url: signatureUrl as string,
       signed_at: new Date(),

@@ -15,21 +15,3 @@ jest.setTimeout(30000);
 beforeEach(() => {
   jest.clearAllMocks();
 });
-
-// 全局错误处理
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-});
-
-// 模拟数据库连接
-jest.mock('../dist/config/database', () => ({
-  sequelize: {
-    authenticate: jest.fn().mockResolvedValue(true),
-    close: jest.fn().mockResolvedValue(true),
-    sync: jest.fn().mockResolvedValue(true)
-  }
-}));

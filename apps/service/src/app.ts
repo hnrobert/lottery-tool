@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import dotenv from 'dotenv';
-import { sequelize } from './config/database';
+import { initDataSource } from './utils/database';
 import errorHandler from './middleware/errorHandler';
 
 dotenv.config();
@@ -23,18 +23,15 @@ const autoInstallSystem = (): Promise<void> => {
   return new Promise((resolve, reject) => {
     console.log('\n=== 检测到系统未安装，正在启动自动安装流程 ===\n');
 
-    // 使用spawn经tsx运行安装脚本源码（tsx为开发依赖，生产精简安装下可能缺失）
-    let installProcess;
-    try {
-      const tsxCli = require.resolve('tsx/cli');
-      installProcess = spawn(process.execPath, [tsxCli, 'scripts/install.ts'], {
+    // 使用spawn运行安装脚本（tsup预构建产物，由 pnpm build:scripts 生成）
+    const installProcess = spawn(
+      process.execPath,
+      [path.join(__dirname, '..', 'scripts', 'dist', 'install.mjs')],
+      {
         cwd: path.join(__dirname, '..'),
-        stdio: 'inherit' // 继承父进程的stdio，这样可以看到安装过程的交互
-      });
-    } catch (e) {
-      reject(new Error('未找到tsx，请先安装依赖（pnpm install）后重试，或手动运行: pnpm run install-system'));
-      return;
-    }
+        stdio: 'inherit', // 继承父进程的stdio，这样可以看到安装过程的交互
+      },
+    );
 
     installProcess.on('close', (code) => {
       if (code === 0) {
@@ -156,13 +153,9 @@ export const createApp = async (): Promise<void> => {
     next();
   });
 
-  // 数据库连接
+  // 数据库连接 + 自动应用pending迁移（与 pnpm migration:run 同一代码路径）
   try {
-    await sequelize.authenticate();
-    console.info('数据库连接成功');
-
-    // 导入模型关联
-    require('./models');
+    await initDataSource();
   } catch (error) {
     console.error('数据库连接失败:', error);
     // 在Docker环境中，如果数据库连接失败，不要立即退出

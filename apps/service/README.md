@@ -2,7 +2,7 @@
 
 🌍 [中文版](README_zh.md) | English
 
-A complete lottery system backend service supporting multiple lottery modes, built with Node.js + Express.js + MySQL.
+A complete lottery system backend service supporting multiple lottery modes, built with Node.js + Express.js + PostgreSQL.
 Provides OpenAPI-compliant JSON protocol documentation for easy API viewing and testing by frontend developers.
 
 ## Features
@@ -17,8 +17,8 @@ Provides OpenAPI-compliant JSON protocol documentation for easy API viewing and 
 ## Tech Stack
 
 - **Backend Framework**: Node.js + Express.js
-- **Database**: MySQL 8.0+
-- **ORM**: Sequelize
+- **Database**: PostgreSQL 16+
+- **ORM**: TypeORM 1.1
 - **Authentication**: JWT
 - **Logging**: Winston
 - **Validation**: express-validator
@@ -28,7 +28,7 @@ Provides OpenAPI-compliant JSON protocol documentation for easy API viewing and 
 ### 1. Requirements
 
 - Node.js >= 16.0.0
-- MySQL >= 8.0
+- PostgreSQL >= 16
 - npm or yarn
 
 ### 2. Install Dependencies
@@ -211,7 +211,7 @@ NODE_ENV=production
 
 # Database configuration
 DB_HOST=localhost
-DB_PORT=3306
+DB_PORT=5432
 DB_NAME=lottery_system
 DB_USER=root
 DB_PASSWORD=your_password
@@ -226,6 +226,27 @@ LOG_FILE=logs/app.log
 ```
 
 ## Development Notes
+
+### Database Migrations (TypeORM + PostgreSQL)
+
+The schema is defined by the entities in `src/entities/` and managed through auto-generated migrations in `src/migrations/`; `synchronize` stays off. Pending migrations are applied automatically on boot.
+
+```bash
+# After changing an entity, generate a migration (diff entities vs database),
+# then register the new class in src/migrations/index.ts
+pnpm migration:generate --name=AddUserAvatar
+
+# Apply / revert one migration
+pnpm migration:run
+pnpm migration:revert
+
+# Commit guard: entity changes must ship with a new registered migration
+# (include "bypass migration check" in the commit message to skip)
+pnpm migration:check
+```
+
+Conventions: migration files are `<timestamp>-<PascalName>.ts` (up/down execute SQL arrays); generated output requires human review (the generator already reorders down statements as constraints → indexes → tables → types).
+
 ### Adding New Lottery Code Formats
 
 1. Add new format in `src/utils/lotteryCodeGenerator.ts`

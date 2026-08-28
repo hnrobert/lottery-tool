@@ -1,11 +1,58 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { body, query, param, validationResult } from 'express-validator';
-import { LotteryRecord, Activity, Prize, LotteryCode, User } from '../../models';
-import { Op } from 'sequelize';
-import { logOperation } from '../../middleware/operationLogger';
+import { In, MoreThanOrEqual } from 'typeorm';
+import { AppDataSource } from '../../utils/database';
+import { LotteryRecord } from '../../entities/lottery-record.entity';
+import * as PrizeService from '../../services/prize.service';
+import * as LotteryCodeService from '../../services/lottery-code.service';
+import * as OperationLogService from '../../services/operation-log.service';
 import moment from 'moment';
 
 const router = express.Router();
+
+// 基础联查（活动/奖品/抽奖码/操作人），抽奖码的参与者信息在其JSON字段中
+const baseQuery = () =>
+  AppDataSource.getRepository(LotteryRecord)
+    .createQueryBuilder('record')
+    .leftJoinAndSelect('record.activity', 'activity')
+    .leftJoinAndSelect('record.prize', 'prize')
+    .leftJoinAndSelect('record.lotteryCode', 'lotteryCode')
+    .leftJoinAndSelect('record.operator', 'operator');
+
+// 应用公共筛选（draw_type 按是否有操作员派生，列本身不存在）
+const applyFilters = (
+  qb: any,
+  filters: {
+    activity_id?: string;
+    prize_id?: string;
+    lottery_code?: string;
+    start_date?: string;
+    end_date?: string;
+    draw_type?: string;
+  },
+) => {
+  if (filters.activity_id) {
+    qb.andWhere('record.activity_id = :activityId', { activityId: parseInt(filters.activity_id) });
+  }
+  if (filters.prize_id) {
+    qb.andWhere('record.prize_id = :prizeId', { prizeId: parseInt(filters.prize_id) });
+  }
+  if (filters.lottery_code) {
+    qb.andWhere('lotteryCode.code ILIKE :lotteryCode', { lotteryCode: `%${filters.lottery_code}%` });
+  }
+  if (filters.draw_type === 'online') {
+    qb.andWhere('record.operator_id IS NULL');
+  } else if (filters.draw_type === 'offline') {
+    qb.andWhere('record.operator_id IS NOT NULL');
+  }
+  if (filters.start_date) {
+    qb.andWhere('record.created_at >= :startDate', { startDate: new Date(filters.start_date) });
+  }
+  if (filters.end_date) {
+    qb.andWhere('record.created_at <= :endDate', { endDate: new Date(filters.end_date) });
+  }
+  return qb;
+};
 
 // 获取抽奖记录列表
 router.get('/', [
@@ -40,47 +87,19 @@ router.get('/', [
     } = req.query as any;
 
     const offset = (page - 1) * limit;
-    const where: Record<string, unknown> = {};
 
-    // 构建查询条件
-    if (activity_id) where.activity_id = activity_id;
-    if (prize_id) where.prize_id = prize_id;
-    if (lottery_code) where.lottery_code = { [Op.like]: `%${lottery_code}%` };
-    if (draw_type) where.draw_type = draw_type;
-    if (start_date || end_date) {
-      where.created_at = {};
-      if (start_date) (where.created_at as any)[Op.gte] = new Date(start_date);
-      if (end_date) (where.created_at as any)[Op.lte] = new Date(end_date);
-    }
-
-    const { count, rows } = await LotteryRecord.findAndCountAll({
-      where,
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status']
-        },
-        {
-          model: Prize,
-          as: 'prize',
-          attributes: ['id', 'name', 'type', 'value']
-        },
-        {
-          model: LotteryCode,
-          as: 'lotteryCode',
-          attributes: ['id', 'code', 'participant_name', 'participant_email', 'participant_phone']
-        },
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'username', 'email']
-        }
-      ],
-      order: [['created_at', 'DESC']],
-      limit: parseInt(limit),
-      offset: Math.floor(offset)
-    });
+    const [rows, count] = await applyFilters(baseQuery(), {
+      activity_id,
+      prize_id,
+      lottery_code,
+      start_date,
+      end_date,
+      draw_type,
+    })
+      .orderBy('record.created_at', 'DESC')
+      .skip(Math.floor(offset))
+      .take(parseInt(limit))
+      .getManyAndCount();
 
     res.json({
       success: true,
@@ -92,6 +111,131 @@ router.get('/', [
           total: count,
           total_pages: Math.ceil(count / limit)
         }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 导出抽奖记录（必须在 GET /:id 之前注册，否则被路径参数遮蔽）
+router.get('/export/csv', [
+  query('activity_id').optional().isInt({ min: 1 }).withMessage('活动ID必须是正整数'),
+  query('start_date').optional().isISO8601().withMessage('开始日期格式不正确'),
+  query('end_date').optional().isISO8601().withMessage('结束日期格式不正确'),
+  query('draw_type').optional().isIn(['online', 'offline']).withMessage('抽奖类型必须是online或offline')
+], async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: '参数验证失败',
+        errors: errors.array()
+      });
+    }
+
+    const { activity_id, start_date, end_date, draw_type } = req.query as any;
+
+    const records = await applyFilters(baseQuery(), {
+      activity_id,
+      start_date,
+      end_date,
+      draw_type,
+    })
+      .orderBy('record.created_at', 'DESC')
+      .getMany();
+
+    // 生成CSV内容
+    const csvHeaders = [
+      '记录ID',
+      '活动名称',
+      '抽奖码',
+      '参与者姓名',
+      '参与者邮箱',
+      '参与者电话',
+      '奖品名称',
+      '抽奖类型',
+      '抽奖操作人',
+      '抽奖时间'
+    ];
+
+    const csvRows = records.map((record: any) => [
+      record.id,
+      record.activity?.name || '',
+      record.lotteryCode?.code || '',
+      record.lotteryCode?.participant_info?.name || '',
+      record.lotteryCode?.participant_info?.email || '',
+      record.lotteryCode?.participant_info?.phone || '',
+      record.prize?.name || '',
+      record.operator_id ? '线下抽奖' : '线上抽奖',
+      record.operator?.username || '',
+      moment(record.created_at).format('YYYY-MM-DD HH:mm:ss')
+    ]);
+
+    const csvContent = [csvHeaders, ...csvRows]
+      .map(row => row.map((field: any) => `"${field}"`).join(','))
+      .join('\n');
+
+    // 设置响应头
+    const filename = `抽奖记录_${moment().format('YYYYMMDD_HHmmss')}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // 记录操作日志
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: 'EXPORT_LOTTERY_RECORDS',
+      operation_detail: `导出抽奖记录 ${records.length} 条`,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
+    });
+
+    res.send(csvContent);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 获取抽奖统计信息（同样必须在 GET /:id 之前注册）
+router.get('/stats/overview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const repo = AppDataSource.getRepository(LotteryRecord);
+
+    const totalRecords = await repo.count();
+    // draw_type 是派生值：无操作员为线上，有操作员为线下
+    const onlineRecords = await repo.countBy({ operator_id: null } as any);
+    const offlineRecords = totalRecords - onlineRecords;
+
+    // 今日抽奖记录
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 本周抽奖记录
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+
+    // 本月抽奖记录
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const [todayRecords, weekRecords, monthRecords] = await Promise.all([
+      repo.count({ where: { created_at: MoreThanOrEqual(today) } }),
+      repo.count({ where: { created_at: MoreThanOrEqual(weekStart) } }),
+      repo.count({ where: { created_at: MoreThanOrEqual(monthStart) } }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        total_records: totalRecords,
+        online_records: onlineRecords,
+        offline_records: offlineRecords,
+        today_records: todayRecords,
+        week_records: weekRecords,
+        month_records: monthRecords
       }
     });
   } catch (error) {
@@ -115,30 +259,9 @@ router.get('/:id', [
 
     const { id } = req.params;
 
-    const record = await LotteryRecord.findByPk(id, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status', 'start_time', 'end_time']
-        },
-        {
-          model: Prize,
-          as: 'prize',
-          attributes: ['id', 'name', 'type', 'value', 'description']
-        },
-        {
-          model: LotteryCode,
-          as: 'lotteryCode',
-          attributes: ['id', 'code', 'participant_name', 'participant_email', 'participant_phone']
-        },
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'username', 'email']
-        }
-      ]
-    });
+    const record = await baseQuery()
+      .where('record.id = :id', { id: parseInt(id) })
+      .getOne();
 
     if (!record) {
       return res.status(404).json({
@@ -156,68 +279,7 @@ router.get('/:id', [
   }
 });
 
-// 删除抽奖记录
-router.delete('/:id', [
-  param('id').isInt({ min: 1 }).withMessage('记录ID必须是正整数')
-], async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: '参数验证失败',
-        errors: errors.array()
-      });
-    }
-
-    const { id } = req.params;
-
-    const record = await LotteryRecord.findByPk(id, {
-      include: [
-        { model: Activity, as: 'activity' },
-        { model: Prize, as: 'prize' },
-        { model: LotteryCode, as: 'lotteryCode' }
-      ]
-    });
-
-    if (!record) {
-      return res.status(404).json({
-        success: false,
-        message: '抽奖记录不存在'
-      });
-    }
-
-    // 恢复奖品库存
-    if ((record as any).prize) {
-      await (record as any).prize.restoreStock(1);
-    }
-
-    // 标记抽奖码为未使用
-    if ((record as any).lotteryCode) {
-      await (record as any).lotteryCode.markAsUnused();
-    }
-
-    // 删除记录
-    await record.destroy();
-
-    // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'delete_lottery_record', {
-      record_id: id,
-      activity_id: record.activity_id,
-      prize_id: record.prize_id,
-      lottery_code: (record as any).lottery_code
-    });
-
-    res.json({
-      success: true,
-      message: '抽奖记录删除成功'
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// 批量删除抽奖记录
+// 批量删除抽奖记录（恢复库存/重置抽奖码/删除 在同一事务中）
 router.delete('/', [
   body('ids').isArray({ min: 1 }).withMessage('必须提供要删除的记录ID数组'),
   body('ids.*').isInt({ min: 1 }).withMessage('记录ID必须是正整数')
@@ -234,12 +296,9 @@ router.delete('/', [
 
     const { ids } = req.body;
 
-    const records = await LotteryRecord.findAll({
-      where: { id: { [Op.in]: ids } },
-      include: [
-        { model: Prize, as: 'prize' },
-        { model: LotteryCode, as: 'lotteryCode' }
-      ]
+    const records = await AppDataSource.getRepository(LotteryRecord).find({
+      where: { id: In(ids) },
+      relations: { prize: true, lotteryCode: true },
     });
 
     if (records.length === 0) {
@@ -249,28 +308,30 @@ router.delete('/', [
       });
     }
 
-    // 批量处理
-    for (const record of records) {
-      // 恢复奖品库存
-      if ((record as any).prize) {
-        await (record as any).prize.restoreStock(1);
+    await AppDataSource.transaction(async (manager) => {
+      for (const record of records) {
+        // 恢复奖品库存
+        if (record.prize) {
+          await PrizeService.restoreStock(record.prize, 1, manager);
+        }
+
+        // 标记抽奖码为未使用
+        if (record.lotteryCode) {
+          await LotteryCodeService.markAsUnused(record.lotteryCode, manager);
+        }
       }
 
-      // 标记抽奖码为未使用
-      if ((record as any).lotteryCode) {
-        await (record as any).lotteryCode.markAsUnused();
-      }
-    }
-
-    // 批量删除记录
-    await LotteryRecord.destroy({
-      where: { id: { [Op.in]: ids } }
+      // 批量删除记录
+      await manager.getRepository(LotteryRecord).remove(records);
     });
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'batch_delete_lottery_records', {
-      record_ids: ids,
-      count: records.length
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: 'BATCH_DELETE_LOTTERY_RECORDS',
+      operation_detail: `批量删除抽奖记录 ${records.length} 条`,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.json({
@@ -282,12 +343,9 @@ router.delete('/', [
   }
 });
 
-// 导出抽奖记录
-router.get('/export/csv', [
-  query('activity_id').optional().isInt({ min: 1 }).withMessage('活动ID必须是正整数'),
-  query('start_date').optional().isISO8601().withMessage('开始日期格式不正确'),
-  query('end_date').optional().isISO8601().withMessage('结束日期格式不正确'),
-  query('draw_type').optional().isIn(['online', 'offline']).withMessage('抽奖类型必须是online或offline')
+// 删除抽奖记录（恢复库存/重置抽奖码/删除 在同一事务中）
+router.delete('/:id', [
+  param('id').isInt({ min: 1 }).withMessage('记录ID必须是正整数')
 ], async (req: Request, res: Response, next: NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -299,152 +357,49 @@ router.get('/export/csv', [
       });
     }
 
-    const { activity_id, start_date, end_date, draw_type } = req.query as any;
-    const where: Record<string, unknown> = {};
+    const { id } = req.params;
 
-    // 构建查询条件
-    if (activity_id) where.activity_id = activity_id;
-    if (draw_type) where.draw_type = draw_type;
-    if (start_date || end_date) {
-      where.created_at = {};
-      if (start_date) (where.created_at as any)[Op.gte] = new Date(start_date);
-      if (end_date) (where.created_at as any)[Op.lte] = new Date(end_date);
+    const record = await AppDataSource.getRepository(LotteryRecord).findOne({
+      where: { id: parseInt(id) },
+      relations: { activity: true, prize: true, lotteryCode: true },
+    });
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: '抽奖记录不存在'
+      });
     }
 
-    const records = await LotteryRecord.findAll({
-      where,
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['name']
-        },
-        {
-          model: Prize,
-          as: 'prize',
-          attributes: ['name', 'type', 'value']
-        },
-        {
-          model: LotteryCode,
-          as: 'lotteryCode',
-          attributes: ['code', 'participant_name', 'participant_email', 'participant_phone']
-        },
-        {
-          model: User,
-          as: 'user',
-          attributes: ['username', 'email']
-        }
-      ],
-      order: [['created_at', 'DESC']]
+    await AppDataSource.transaction(async (manager) => {
+      // 恢复奖品库存
+      if (record.prize) {
+        await PrizeService.restoreStock(record.prize, 1, manager);
+      }
+
+      // 标记抽奖码为未使用
+      if (record.lotteryCode) {
+        await LotteryCodeService.markAsUnused(record.lotteryCode, manager);
+      }
+
+      // 删除记录
+      await manager.getRepository(LotteryRecord).remove(record);
     });
-
-    // 生成CSV内容
-    const csvHeaders = [
-      '记录ID',
-      '活动名称',
-      '抽奖码',
-      '参与者姓名',
-      '参与者邮箱',
-      '参与者电话',
-      '奖品名称',
-      '奖品类型',
-      '奖品价值',
-      '抽奖类型',
-      '抽奖用户',
-      '抽奖时间'
-    ];
-
-    const csvRows = records.map((record: any) => [
-      record.id,
-      record.activity?.name || '',
-      record.lottery_code,
-      record.lotteryCode?.participant_name || '',
-      record.lotteryCode?.participant_email || '',
-      record.lotteryCode?.participant_phone || '',
-      record.prize?.name || '',
-      record.prize?.type || '',
-      record.prize?.value || '',
-      record.draw_type === 'online' ? '线上抽奖' : '线下抽奖',
-      record.user?.username || '',
-      moment(record.created_at).format('YYYY-MM-DD HH:mm:ss')
-    ]);
-
-    const csvContent = [csvHeaders, ...csvRows]
-      .map(row => row.map((field: any) => `"${field}"`).join(','))
-      .join('\n');
-
-    // 设置响应头
-    const filename = `抽奖记录_${moment().format('YYYYMMDD_HHmmss')}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'export_lottery_records', {
-      activity_id,
-      start_date,
-      end_date,
-      draw_type,
-      count: records.length
-    });
-
-    res.send(csvContent);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// 获取抽奖统计信息
-router.get('/stats/overview', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const totalRecords = await LotteryRecord.count();
-    const onlineRecords = await LotteryRecord.count({ where: { draw_type: 'online' } as any });
-    const offlineRecords = await LotteryRecord.count({ where: { draw_type: 'offline' } as any });
-
-    // 今日抽奖记录
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayRecords = await LotteryRecord.count({
-      where: {
-        created_at: {
-          [Op.gte]: today
-        }
-      }
-    });
-
-    // 本周抽奖记录
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-    const weekRecords = await LotteryRecord.count({
-      where: {
-        created_at: {
-          [Op.gte]: weekStart
-        }
-      }
-    });
-
-    // 本月抽奖记录
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const monthRecords = await LotteryRecord.count({
-      where: {
-        created_at: {
-          [Op.gte]: monthStart
-        }
-      }
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: 'DELETE_LOTTERY_RECORD',
+      operation_detail: `删除抽奖记录 #${id}`,
+      target_type: 'LOTTERY_RECORD',
+      target_id: parseInt(id),
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.json({
       success: true,
-      data: {
-        total_records: totalRecords,
-        online_records: onlineRecords,
-        offline_records: offlineRecords,
-        today_records: todayRecords,
-        week_records: weekRecords,
-        month_records: monthRecords
-      }
+      message: '抽奖记录删除成功'
     });
   } catch (error) {
     next(error);
