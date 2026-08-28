@@ -23,11 +23,18 @@ const autoInstallSystem = (): Promise<void> => {
   return new Promise((resolve, reject) => {
     console.log('\n=== 检测到系统未安装，正在启动自动安装流程 ===\n');
 
-    // 使用spawn运行安装脚本（编译产物位于dist/scripts）
-    const installProcess = spawn('node', ['dist/scripts/install.js'], {
-      cwd: path.join(__dirname, '..'),
-      stdio: 'inherit' // 继承父进程的stdio，这样可以看到安装过程的交互
-    });
+    // 使用spawn经tsx运行安装脚本源码（tsx为开发依赖，生产精简安装下可能缺失）
+    let installProcess;
+    try {
+      const tsxCli = require.resolve('tsx/cli');
+      installProcess = spawn(process.execPath, [tsxCli, 'scripts/install.ts'], {
+        cwd: path.join(__dirname, '..'),
+        stdio: 'inherit' // 继承父进程的stdio，这样可以看到安装过程的交互
+      });
+    } catch (e) {
+      reject(new Error('未找到tsx，请先安装依赖（pnpm install）后重试，或手动运行: pnpm run install-system'));
+      return;
+    }
 
     installProcess.on('close', (code) => {
       if (code === 0) {

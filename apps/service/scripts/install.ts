@@ -7,8 +7,8 @@ import path from 'path';
 
 console.log('\n=== 抽奖系统安装向导 ===\n');
 
-// 编译产物位于 dist/scripts，向上两级回到服务根目录
-const SERVICE_ROOT = path.resolve(__dirname, '../..');
+// 本脚本经 tsx 直接运行，__dirname 即源码 scripts/ 目录
+const SERVICE_ROOT = path.resolve(__dirname, '..');
 
 // 安装向导收集的配置
 interface InstallConfig {
