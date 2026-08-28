@@ -5,7 +5,9 @@ import { Op } from 'sequelize';
 import { logOperation } from '../middleware/operationLogger';
 import bcrypt from 'bcryptjs';
 import moment from 'moment';
-import { authenticateToken, requireAdmin } from '../middleware/auth';
+import { authenticateToken, requireAdmin, requireSuperAdmin } from '../middleware/auth';
+import { getMaskedCosConfig, isCosConfigured } from '../utils/systemConfig';
+import * as cosClient from '../utils/cosClient';
 
 const router = express.Router();
 
@@ -640,6 +642,36 @@ router.get('/config', async (req: Request, res: Response, next: NextFunction) =>
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// ==================== COS 配置（只读，仅环境变量） ====================
+// COS 配置仅通过服务端环境变量（.env）设置，不支持通过 API 修改
+// 密钥只放服务端，推荐使用子账号最小权限
+router.get('/cos-config', [
+  authenticateToken,
+  requireSuperAdmin,
+], async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const config = getMaskedCosConfig();
+    res.json({
+      success: true,
+      data: {
+        configured: config !== null,
+        config: config || {
+          secret_id: '',
+          secret_key: '',
+          bucket: '',
+          region: '',
+          custom_domain: '',
+          path_prefix: '',
+        },
+        note: 'COS 配置仅通过服务端环境变量（.env）设置，不支持通过此接口修改。请设置 COS_SECRET_ID、COS_SECRET_KEY、COS_BUCKET、COS_REGION 等环境变量后重启服务。',
+      },
+    });
+  } catch (error) {
+    console.error('获取COS配置失败:', error);
+    res.status(500).json({ success: false, message: '获取COS配置失败' });
   }
 });
 

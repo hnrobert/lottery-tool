@@ -9,6 +9,8 @@ import LotteryCode from '../models/LotteryCode';
 import Prize from '../models/Prize';
 import LotteryRecord from '../models/LotteryRecord';
 import OperationLog from '../models/OperationLog';
+import * as cosClient from '../utils/cosClient';
+import { isCosConfigured, getCosConfig } from '../utils/systemConfig';
 
 const router = express.Router();
 
@@ -60,7 +62,10 @@ router.get('/activities/:id', async (req: Request, res: Response, next: NextFunc
           status: activity.status,
           lottery_mode: activity.lottery_mode,
           start_time: activity.start_time,
-          end_time: activity.end_time
+          end_time: activity.end_time,
+          settings: {
+            require_signature: activity.settings?.require_signature === true
+          }
         },
         prizes: (activity as any).prizes,
         lottery_codes_count: lotteryCodesCount
@@ -336,6 +341,106 @@ async (req: Request, res: Response, next: NextFunction) => {
     });
   } catch (error) {
     await transaction.rollback();
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/lottery/activities/:id/records/:recordId/signature
+ * @desc    上传签字图片到COS并更新记录
+ * @access  Private (Admin)
+ */
+router.post('/activities/:id/records/:recordId/signature', [
+  authenticateToken,
+  requireAdmin,
+  body('image')
+    .notEmpty()
+    .withMessage('签字图片不能为空')
+    .isString()
+    .withMessage('签字图片必须是base64字符串')
+],
+validateRequest,
+async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const activityId = parseInt(req.params.id);
+    const recordId = parseInt(req.params.recordId);
+    const { image } = req.body;
+
+    // 检查COS是否配置
+    if (!isCosConfigured()) {
+      throw createError('BUSINESS_COS_NOT_CONFIGURED', '系统未配置COS，无法上传签字');
+    }
+
+    // 查找活动
+    const activity = await Activity.findByPk(activityId);
+    if (!activity) {
+      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
+    }
+
+    // 检查用户权限
+    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
+      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
+    }
+
+    // 查找抽奖记录
+    const record = await LotteryRecord.findByPk(recordId);
+    if (!record) {
+      throw createError('BUSINESS_LOTTERY_RECORD_NOT_FOUND', '抽奖记录不存在');
+    }
+
+    // 校验记录属于该活动
+    if (record.activity_id !== activityId) {
+      throw createError('VALIDATION_INVALID_FORMAT', '该记录不属于此活动');
+    }
+
+    // 校验是线下抽奖记录（有operator_id）
+    if (!record.operator_id) {
+      throw createError('VALIDATION_INVALID_FORMAT', '仅线下抽奖记录支持签字');
+    }
+
+    // 校验已经签过字
+    if (record.signature_status === 'signed') {
+      throw createError('BUSINESS_SIGNATURE_EXISTS', '该记录已签字，不可重复签字');
+    }
+
+    // 解析base64图片
+    const base64Data = image.replace(/^data:image\/png;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+
+    // 限制大小（2MB）
+    const MAX_SIZE = 2 * 1024 * 1024;
+    if (imageBuffer.length > MAX_SIZE) {
+      throw createError('VALIDATION_FILE_TOO_LARGE', '签字图片大小不能超过2MB');
+    }
+
+    // 构建COS对象键
+    const cosConfig = getCosConfig()!;
+    const objectKey = cosClient.buildObjectKey(activityId, recordId, cosConfig.path_prefix);
+
+    // 上传到COS
+    await cosClient.putObject(objectKey, imageBuffer, 'image/png');
+
+    // 构建访问URL
+    const signatureUrl = cosClient.buildPublicUrl(objectKey);
+
+    // 更新记录
+    await LotteryRecord.updateSignature(recordId, {
+      signature_key: objectKey,
+      signature_url: signatureUrl as string,
+      signed_at: new Date(),
+    });
+
+    res.json({
+      success: true,
+      data: {
+        record_id: recordId,
+        signature_key: objectKey,
+        signature_url: signatureUrl,
+        signed_at: new Date().toISOString(),
+      },
+      message: '签字上传成功',
+    });
+  } catch (error) {
     next(error);
   }
 });

@@ -35,6 +35,7 @@ export const ErrorTypes: Record<string, ErrorTypeDef> = {
   VALIDATION_INVALID_FORMAT: { code: 'VALIDATION_002', message: '参数格式错误', statusCode: 400 },
   VALIDATION_OUT_OF_RANGE: { code: 'VALIDATION_003', message: '参数值超出范围', statusCode: 400 },
   VALIDATION_DUPLICATE_DATA: { code: 'VALIDATION_004', message: '数据重复', statusCode: 400 },
+  VALIDATION_FILE_TOO_LARGE: { code: 'VALIDATION_005', message: '文件大小超出限制', statusCode: 400 },
 
   // 业务相关错误
   BUSINESS_ACTIVITY_NOT_FOUND: { code: 'BUSINESS_001', message: '活动不存在', statusCode: 404 },
@@ -44,6 +45,9 @@ export const ErrorTypes: Record<string, ErrorTypeDef> = {
   BUSINESS_LOTTERY_CODE_EXISTS: { code: 'BUSINESS_005', message: '抽奖码已存在', statusCode: 400 },
   BUSINESS_LOTTERY_CODE_USED: { code: 'BUSINESS_006', message: '抽奖码已使用', statusCode: 400 },
   BUSINESS_LOTTERY_CODE_NOT_FOUND: { code: 'BUSINESS_007', message: '抽奖码不存在', statusCode: 404 },
+  BUSINESS_LOTTERY_RECORD_NOT_FOUND: { code: 'BUSINESS_008', message: '抽奖记录不存在', statusCode: 404 },
+  BUSINESS_COS_NOT_CONFIGURED: { code: 'BUSINESS_009', message: '系统未配置COS，无法上传签字', statusCode: 400 },
+  BUSINESS_SIGNATURE_EXISTS: { code: 'BUSINESS_010', message: '该记录已签字，不可重复签字', statusCode: 400 },
 
   // 系统相关错误
   SYSTEM_DATABASE_ERROR: { code: 'SYSTEM_001', message: '数据库连接失败', statusCode: 500 },

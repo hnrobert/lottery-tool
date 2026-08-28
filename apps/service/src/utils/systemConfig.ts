@@ -1,22 +1,40 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const CONFIG_PATH = path.join(__dirname, '../../config/system.json');
 
-function readConfig() {
+export interface CosConfig {
+  secret_id: string;
+  secret_key: string;
+  bucket: string;
+  region: string;
+  custom_domain: string | null;
+  path_prefix: string;
+}
+
+export interface MaskedCosConfig {
+  secret_id: string;
+  secret_key: string;
+  bucket: string;
+  region: string;
+  custom_domain: string;
+  path_prefix: string;
+}
+
+export function readConfig(): Record<string, unknown> {
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       return {};
     }
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
     return JSON.parse(raw);
-  } catch (error) {
+  } catch (error: any) {
     console.error('读取系统配置文件失败:', error.message);
     return {};
   }
 }
 
-function writeConfig(config) {
+export function writeConfig(config: Record<string, unknown>): void {
   const dir = path.dirname(CONFIG_PATH);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -28,7 +46,7 @@ function writeConfig(config) {
  * COS 配置仅从环境变量读取，不支持 system.json 配置
  * 密钥只放服务端，推荐使用子账号最小权限
  */
-function getCosConfig() {
+export function getCosConfig(): CosConfig | null {
   const secretId = process.env.COS_SECRET_ID;
   const secretKey = process.env.COS_SECRET_KEY;
   const bucket = process.env.COS_BUCKET;
@@ -46,7 +64,7 @@ function getCosConfig() {
   };
 }
 
-function getMaskedCosConfig() {
+export function getMaskedCosConfig(): MaskedCosConfig | null {
   const config = getCosConfig();
   if (!config) {
     return null;
@@ -61,14 +79,6 @@ function getMaskedCosConfig() {
   };
 }
 
-function isCosConfigured() {
+export function isCosConfigured(): boolean {
   return getCosConfig() !== null;
 }
-
-module.exports = {
-  readConfig,
-  writeConfig,
-  getCosConfig,
-  getMaskedCosConfig,
-  isCosConfigured,
-};

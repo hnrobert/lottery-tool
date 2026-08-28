@@ -167,7 +167,8 @@ async (req: Request, res: Response, next: NextFunction) => {
       activityData.settings = {
         max_lottery_codes: settings.max_lottery_codes || 1000,
         lottery_code_format: settings.lottery_code_format || '8_digit_number',
-        allow_duplicate_phone: settings.allow_duplicate_phone || false
+        allow_duplicate_phone: settings.allow_duplicate_phone || false,
+        require_signature: settings.require_signature === true
       };
     }
 
@@ -780,6 +781,10 @@ async (req: Request, res: Response, next: NextFunction) => {
         ip_address: record.ip_address,
         user_agent: record.user_agent,
         created_at: record.created_at,
+        signature_key: record.signature_key,
+        signature_url: record.signature_url,
+        signed_at: record.signed_at,
+        signature_status: record.signature_status || 'unsigned',
         lotteryCode: record.lotteryCode?.code,
         prize: record.prize?.name,
         operator: record.operator?.username

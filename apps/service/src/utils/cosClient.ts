@@ -1,15 +1,17 @@
+import { getCosConfig, CosConfig } from './systemConfig';
+
+// cos-nodejs-sdk-v5 无官方 TypeScript 类型定义，使用 require 导入并声明为 any
 const COS = require('cos-nodejs-sdk-v5');
-const { getCosConfig } = require('./systemConfig');
 
-let cosInstance = null;
-let lastConfigKey = null;
+let cosInstance: any = null;
+let lastConfigKey: string | null = null;
 
-function getConfigKey(config) {
+function getConfigKey(config: CosConfig | null): string | null {
   if (!config) return null;
   return `${config.secret_id}|${config.secret_key}|${config.bucket}|${config.region}`;
 }
 
-function getClient() {
+function getClient(): any {
   const config = getCosConfig();
   if (!config) {
     return null;
@@ -29,7 +31,7 @@ function getClient() {
   return cosInstance;
 }
 
-function buildObjectKey(activityId, recordId, prefix = '') {
+function buildObjectKey(activityId: number, recordId: number, prefix: string = ''): string {
   const timestamp = Date.now();
   const base = `lottery-signatures/${activityId}/${recordId}/${timestamp}.png`;
   if (prefix) {
@@ -39,13 +41,13 @@ function buildObjectKey(activityId, recordId, prefix = '') {
   return base;
 }
 
-async function putObject(key, body, contentType = 'image/png') {
+async function putObject(key: string, body: Buffer, contentType: string = 'image/png'): Promise<any> {
   const cos = getClient();
   if (!cos) {
     throw new Error('COS 未配置');
   }
 
-  const config = getCosConfig();
+  const config = getCosConfig() as CosConfig;
 
   return new Promise((resolve, reject) => {
     cos.putObject({
@@ -54,7 +56,7 @@ async function putObject(key, body, contentType = 'image/png') {
       Key: key,
       Body: body,
       ContentType: contentType,
-    }, (err, data) => {
+    }, (err: any, data: any) => {
       if (err) {
         reject(err);
       } else {
@@ -64,13 +66,13 @@ async function putObject(key, body, contentType = 'image/png') {
   });
 }
 
-async function getSignedUrl(key, expires = 3600) {
+async function getSignedUrl(key: string, expires: number = 3600): Promise<string> {
   const cos = getClient();
   if (!cos) {
     throw new Error('COS 未配置');
   }
 
-  const config = getCosConfig();
+  const config = getCosConfig() as CosConfig;
 
   return new Promise((resolve, reject) => {
     cos.getObjectUrl({
@@ -79,7 +81,7 @@ async function getSignedUrl(key, expires = 3600) {
       Key: key,
       Sign: true,
       Expires: expires,
-    }, (err, data) => {
+    }, (err: any, data: any) => {
       if (err) {
         reject(err);
       } else {
@@ -89,7 +91,7 @@ async function getSignedUrl(key, expires = 3600) {
   });
 }
 
-function buildPublicUrl(key) {
+function buildPublicUrl(key: string): string | null {
   const config = getCosConfig();
   if (!config) return null;
 
@@ -101,21 +103,21 @@ function buildPublicUrl(key) {
   return `https://${config.bucket}.cos.${config.region}.myqcloud.com/${key}`;
 }
 
-async function testConnection() {
+async function testConnection(): Promise<Record<string, unknown>> {
   const cos = getClient();
   if (!cos) {
     throw new Error('COS 未配置');
   }
 
-  const config = getCosConfig();
+  const config = getCosConfig() as CosConfig;
 
   return new Promise((resolve, reject) => {
-    cos.getService((err, data) => {
+    cos.getService((err: any, data: any) => {
       if (err) {
         reject(err);
       } else {
         const buckets = data.Buckets || [];
-        const bucketExists = buckets.some(b => b.Name === config.bucket);
+        const bucketExists = buckets.some((b: any) => b.Name === config.bucket);
         resolve({
           success: true,
           bucket_exists: bucketExists,
@@ -126,7 +128,7 @@ async function testConnection() {
   });
 }
 
-module.exports = {
+export {
   getClient,
   buildObjectKey,
   putObject,

@@ -10,6 +10,10 @@ export interface LotteryRecordAttributes {
   operator_id: number | null;
   ip_address: string | null;
   user_agent: string | null;
+  signature_key: string | null;
+  signature_url: string | null;
+  signed_at: Date | null;
+  signature_status: 'unsigned' | 'signed';
   created_at: Date;
 }
 
@@ -24,6 +28,10 @@ class LotteryRecord extends Model<LotteryRecordAttributes, LotteryRecordCreation
   public operator_id!: number | null;
   public ip_address!: string | null;
   public user_agent!: string | null;
+  public signature_key!: string | null;
+  public signature_url!: string | null;
+  public signed_at!: Date | null;
+  public signature_status!: 'unsigned' | 'signed';
   public created_at!: Date;
 
   // 实例方法：检查是否中奖
@@ -71,6 +79,31 @@ class LotteryRecord extends Model<LotteryRecordAttributes, LotteryRecordCreation
       },
       { transaction: options.transaction }
     );
+  }
+
+  // 类方法：更新签字信息
+  public static async updateSignature(
+    recordId: number,
+    signatureData: {
+      signature_key: string;
+      signature_url: string;
+      signed_at?: Date;
+    },
+    options: { transaction?: Transaction } = {}
+  ): Promise<LotteryRecord | null> {
+    const record = await this.findByPk(recordId, { transaction: options.transaction });
+    if (!record) {
+      return null;
+    }
+
+    await record.update({
+      signature_key: signatureData.signature_key,
+      signature_url: signatureData.signature_url,
+      signed_at: signatureData.signed_at || new Date(),
+      signature_status: 'signed',
+    }, { transaction: options.transaction });
+
+    return record;
   }
 
   // 类方法：获取活动的抽奖记录
@@ -386,6 +419,31 @@ LotteryRecord.init(
       type: DataTypes.TEXT,
       allowNull: true,
       field: 'user_agent'
+    },
+    signature_key: {
+      type: DataTypes.STRING(512),
+      allowNull: true,
+      field: 'signature_key',
+      comment: '签字图片在COS中的对象键'
+    },
+    signature_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'signature_url',
+      comment: '签字图片访问URL（预签名或公开URL）'
+    },
+    signed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'signed_at',
+      comment: '签字时间'
+    },
+    signature_status: {
+      type: DataTypes.ENUM('unsigned', 'signed'),
+      allowNull: false,
+      defaultValue: 'unsigned',
+      field: 'signature_status',
+      comment: '签字状态'
     },
     created_at: {
       type: DataTypes.DATE,
