@@ -1,0 +1,71 @@
+name: Build and publish Docker image
+
+# push main -> 构建后端镜像并推 GHCR（latest + sha）。
+# 构建上下文为仓库根（Dockerfile 在 apps/service/）。
+
+on:
+  push:
+    branches:
+      - "*"
+    paths:
+      - 'apps/service/**'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - 'pnpm-lock.yaml'
+      - '.dockerignore'
+      - '.github/workflows/docker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-service
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # fork 上也会跑（推到 fork 自己的 GHCR 命名空间）；只想在主仓库跑时取消注释：
+    # if: github.repository == 'CompPsyUnion/lottery-tool'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=main-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          provenance: false # Disable provenance to avoid unknown/unknown
+          sbom: false # Disable sbom to avoid unknown/unknown
+          context: .
+          file: apps/service/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
