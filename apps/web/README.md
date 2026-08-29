@@ -1,4 +1,4 @@
-# 🎯 Lottery Tool 2
+# 抽奖工具 v3
 
 [![Vue](https://img.shields.io/badge/Vue-3.x-brightgreen.svg)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
@@ -7,74 +7,81 @@
 
 [English](README.md) | [中文](README-cn.md)
 
-A modern, user-friendly lottery management system that helps event organizers easily create and manage lottery activities. The system is designed to be intuitive and straightforward, suitable for various online and offline event scenarios.
+一个现代化、易用的抽奖活动管理系统，帮助活动组织者轻松创建和管理抽奖活动。系统设计简洁直观，操作便捷，适用于各类线上线下活动场景。
 
-## ✨ Features
+## 特色功能
 
-Supports two flexible lottery modes:
-1. **Mode 1 (Offline Redemption)**: Distribute lottery codes -> Users redeem prizes by entering codes on the administrator's device -> Receive prizes on-site
-2. **Mode 2 (Online Redemption)**: Distribute lottery codes -> Users redeem prizes by themselves through a link provided by the event organizer -> Get redemption vouchers
+支持两种灵活的抽奖模式：
 
-## 🚀 Tech Stack
+1. **模式一 (线下兑奖)** ：分发抽奖码 → 用户线下前往管理员设备输入兑奖码 → 现场兑换奖品
+2. **模式二 (在线兑奖)** ：分发抽奖码 → 用户通过活动发起者提供的链接自行兑奖 → 获取兑奖凭证
 
-### Frontend
-- **Vue 3** - With Composition API for reactive and composable component logic
-- **TypeScript** - For enhanced code maintainability and developer experience
-- **Vite** - Lightning fast frontend build tool
-- **Vue Router** - Official router for single-page application navigation
-- **Pinia** - Intuitive, type-safe state management solution
-- **i18n**(developing) - Comprehensive internationalization support
-- **Shadcn UI** - Beautiful UI component library for modern visual experience
+## 🚀 技术栈
 
-### Backend
-The backend repository is available at: [Lottery-Tool-Backend](https://github.com/buduan/Lottery-Tool-Backend)
+### 前端
 
-## 📚 API Documentation
+- **Vue 3** - 采用组合式API，提供响应式和组件化的视图构建
+- **TypeScript** - 增强代码可维护性和开发体验
+- **Vite** - 极速的前端构建工具，提供闪电般的开发体验
+- **Vue Router** - 官方路由管理器，实现单页应用导航
+- **Pinia** - 直观、类型安全的状态管理解决方案
+- **i18n**(开发中) - 完整的国际化支持，轻松切换多语言
+- **Shadcn UI** - 精美的UI组件库，提供现代化视觉体验
 
-Detailed API documentation is available at: [api-doc.lottery.ibuduan.com](http://api-doc.lottery.ibuduan.com)
+### 后端
 
-## 📷 Screenshots
+后端仓库地址：[Lottery-Tool-Backend](https://github.com/buduan/Lottery-Tool-Backend)
 
-![Lottery Management Interface](https://via.placeholder.com/800x450.png?text=Lottery+Management+Interface)
-![User Redemption Page](https://via.placeholder.com/800x450.png?text=User+Redemption+Page)
+## 📚 接口文档
 
-## 🛠️ Development
+详细的API接口文档可访问：[api-doc.lottery.ibuduan.com](http://api-doc.lottery.ibuduan.com)
+
+## 📷 项目截图
+
+![抽奖管理界面](https://via.placeholder.com/800x450.png?text=抽奖管理界面)
+![用户兑奖页面](https://via.placeholder.com/800x450.png?text=用户兑奖页面)
+
+## 🛠️ 开发指南
 
 ```bash
-# Install dependencies
+# 安装依赖
 pnpm install
 
-# Start development server
+# 启动开发服务器
 pnpm dev
 
-# Build for production
+# 构建生产版本
 pnpm build
 
-# Preview production build
+# 预览生产构建
 pnpm preview
 ```
 
-## 🔧 Configuration
+## 🔧 配置说明
 
-Project configuration files are located in the `src/config` directory. You can adjust the following settings as needed:
+项目配置文件位于 `src/config` 目录，可根据需要调整以下配置：
 
-- API endpoints
-- Theme settings
-- Internationalization options
-- Other system parameters
+- 接口地址
+- 主题设置
+- 国际化选项
+- 其他系统参数
 
-## 👥 Contribution
+## 👥 贡献指南
 
-We welcome all forms of contributions!
+我们欢迎所有形式的贡献！
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork 本仓库
+2. 创建您的特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交您的更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 开启一个 Pull Request
 
-LLMs.txt is provided in the documentation. Everyone is welcome to join Vibe Coding!
+文档中提供了LLMs.txt，欢迎各位一起Vibe Coding！
 
-## 📄 License
+## 📄 许可证
 
-This project is licensed under the [MIT](LICENSE) License - see the LICENSE file for details
+本项目采用 [MIT](LICENSE) 许可证 - 查看 LICENSE 文件了解详情
+
+## 部署
+
+前端部署至腾讯云 EdgeOne Pages（环境变量配置 API 地址）见 [DEPLOY_EDGEONE.md](../../docs/DEPLOY_EDGEONE.md)。

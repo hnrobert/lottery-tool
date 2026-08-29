@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { createError } from '../utils/customError';
-import User from '../models/User';
+import * as UserService from '../services/user.service';
+import * as ActivityService from '../services/activity.service';
 
 /**
  * JWT Token 验证中间件
@@ -19,7 +20,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { userId: number };
 
     // 查找用户
-    const user = await User.findByPk(decoded.userId);
+    const user = await UserService.findById(decoded.userId);
     if (!user) {
       throw createError('AUTH_TOKEN_INVALID', '用户不存在');
     }
@@ -29,7 +30,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     }
 
     // 将用户信息添加到请求对象
-    (req as any).user = user.toSafeJSON();
+    (req as any).user = UserService.toSafeUser(user);
     next();
   } catch (error: any) {
     if (error.name === 'JsonWebTokenError') {
@@ -91,9 +92,9 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { userId: number };
 
     // 查找用户
-    const user = await User.findByPk(decoded.userId);
+    const user = await UserService.findById(decoded.userId);
     if (user && user.status === 'active') {
-      (req as any).user = user.toSafeJSON();
+      (req as any).user = UserService.toSafeUser(user);
     }
 
     next();
@@ -123,8 +124,7 @@ export const authenticateWebhook = async (req: Request, res: Response, next: Nex
     }
 
     // 查找对应的活动
-    const Activity = require('../models/Activity').default;
-    const activity = await Activity.findByWebhookId(webhookId);
+    const activity = await ActivityService.findByWebhookId(webhookId);
 
     if (!activity) {
       throw createError('BUSINESS_ACTIVITY_NOT_FOUND', '活动不存在');

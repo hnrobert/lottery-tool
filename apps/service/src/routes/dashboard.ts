@@ -1,7 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
+import { In } from 'typeorm';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
-import { User, Activity, LotteryCode, LotteryRecord } from '../models';
-import { Op } from 'sequelize';
+import { AppDataSource } from '../utils/database';
+import { User } from '../entities/user.entity';
+import { Activity } from '../entities/activity.entity';
+import { LotteryCode } from '../entities/lottery-code.entity';
+import { LotteryRecord } from '../entities/lottery-record.entity';
 
 const router = express.Router();
 
@@ -22,16 +26,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     if (user.role === 'super_admin') {
       // 超级管理员：返回系统中活动总数、抽奖码总数、管理员总数、抽奖记录总数
       const [totalActivities, totalLotteryCodes, totalAdmins, totalLotteryRecords] = await Promise.all([
-        Activity.count(),
-        LotteryCode.count(),
-        User.count({
-          where: {
-            role: {
-              [Op.in]: ['admin', 'super_admin']
-            }
-          }
+        AppDataSource.getRepository(Activity).count(),
+        AppDataSource.getRepository(LotteryCode).count(),
+        AppDataSource.getRepository(User).count({
+          where: { role: In(['admin', 'super_admin']) },
         }),
-        LotteryRecord.count()
+        AppDataSource.getRepository(LotteryRecord).count(),
       ]);
 
       dashboardData = {
@@ -43,30 +43,18 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     } else {
       // 管理员：返回此用户创建的活动总数、抽奖码总数、抽奖记录总数、和系统中用户总数
       const [userActivities, userLotteryCodes, userLotteryRecords, totalUsers] = await Promise.all([
-        Activity.count({
-          where: {
-            created_by: user.id
-          }
-        }),
-        LotteryCode.count({
-          include: [{
-            model: Activity,
-            as: 'activity',
-            where: {
-              created_by: user.id
-            }
-          }]
-        }),
-        LotteryRecord.count({
-          include: [{
-            model: Activity,
-            as: 'activity',
-            where: {
-              created_by: user.id
-            }
-          }]
-        }),
-        User.count()
+        AppDataSource.getRepository(Activity).count({ where: { created_by: user.id } }),
+        AppDataSource.getRepository(LotteryCode)
+          .createQueryBuilder('lottery_code')
+          .innerJoin('lottery_code.activity', 'activity')
+          .where('activity.created_by = :userId', { userId: user.id })
+          .getCount(),
+        AppDataSource.getRepository(LotteryRecord)
+          .createQueryBuilder('record')
+          .innerJoin('record.activity', 'activity')
+          .where('activity.created_by = :userId', { userId: user.id })
+          .getCount(),
+        AppDataSource.getRepository(User).count(),
       ]);
 
       dashboardData = {

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import OperationLog from '../models/OperationLog';
+import { OPERATION_TYPES, log as writeOperationLog } from '../services/operation-log.service';
 import logger from '../utils/logger';
 
 type GetOperationDetail = (req: Request, res: Response, data: any) => string;
@@ -41,7 +41,7 @@ export const logOperation = (
               }
             }
 
-            await OperationLog.log({
+            await writeOperationLog({
               user_id: (req as any).user ? (req as any).user.id : null,
               operation_type: operationType,
               operation_detail: operationDetail,
@@ -69,11 +69,11 @@ export const logOperation = (
 export const logAuthOperation = (operationType: string) => {
   return logOperation(operationType, (req: Request, _res: Response, _data: any) => {
     switch (operationType) {
-      case OperationLog.OPERATION_TYPES.USER_LOGIN:
+      case OPERATION_TYPES.USER_LOGIN:
         return `用户登录: ${req.body.username}`;
-      case OperationLog.OPERATION_TYPES.USER_LOGOUT:
+      case OPERATION_TYPES.USER_LOGOUT:
         return '用户登出';
-      case OperationLog.OPERATION_TYPES.PASSWORD_CHANGE:
+      case OPERATION_TYPES.PASSWORD_CHANGE:
         return '修改密码';
       default:
         return operationType;
@@ -93,15 +93,15 @@ export const logActivityOperation = (operationType: string) => {
         '未知活动';
 
       switch (operationType) {
-        case OperationLog.OPERATION_TYPES.CREATE_ACTIVITY:
+        case OPERATION_TYPES.CREATE_ACTIVITY:
           return `创建活动: ${activityName}`;
-        case OperationLog.OPERATION_TYPES.UPDATE_ACTIVITY:
+        case OPERATION_TYPES.UPDATE_ACTIVITY:
           return `更新活动: ${activityName}`;
-        case OperationLog.OPERATION_TYPES.DELETE_ACTIVITY:
+        case OPERATION_TYPES.DELETE_ACTIVITY:
           return `删除活动: ${activityName}`;
-        case OperationLog.OPERATION_TYPES.ACTIVATE_ACTIVITY:
+        case OPERATION_TYPES.ACTIVATE_ACTIVITY:
           return `激活活动: ${activityName}`;
-        case OperationLog.OPERATION_TYPES.END_ACTIVITY:
+        case OPERATION_TYPES.END_ACTIVITY:
           return `结束活动: ${activityName}`;
         default:
           return operationType;
@@ -130,11 +130,11 @@ export const logPrizeOperation = (operationType: string) => {
         '未知奖品';
 
       switch (operationType) {
-        case OperationLog.OPERATION_TYPES.CREATE_PRIZE:
+        case OPERATION_TYPES.CREATE_PRIZE:
           return `创建奖品: ${prizeName}`;
-        case OperationLog.OPERATION_TYPES.UPDATE_PRIZE:
+        case OPERATION_TYPES.UPDATE_PRIZE:
           return `更新奖品: ${prizeName}`;
-        case OperationLog.OPERATION_TYPES.DELETE_PRIZE:
+        case OPERATION_TYPES.DELETE_PRIZE:
           return `删除奖品: ${prizeName}`;
         default:
           return operationType;
@@ -159,17 +159,17 @@ export const logLotteryCodeOperation = (operationType: string) => {
     operationType,
     (req: Request, _res: Response, _data: any) => {
       switch (operationType) {
-        case OperationLog.OPERATION_TYPES.CREATE_LOTTERY_CODE:
+        case OPERATION_TYPES.CREATE_LOTTERY_CODE:
           return `创建抽奖码: ${req.body.code}`;
-        case OperationLog.OPERATION_TYPES.BATCH_CREATE_LOTTERY_CODE: {
+        case OPERATION_TYPES.BATCH_CREATE_LOTTERY_CODE: {
           const count = req.body.count || 0;
           return `批量创建抽奖码: ${count}个`;
         }
-        case OperationLog.OPERATION_TYPES.IMPORT_LOTTERY_CODE:
+        case OPERATION_TYPES.IMPORT_LOTTERY_CODE:
           return '导入抽奖码';
-        case OperationLog.OPERATION_TYPES.UPDATE_LOTTERY_CODE:
+        case OPERATION_TYPES.UPDATE_LOTTERY_CODE:
           return '更新抽奖码信息';
-        case OperationLog.OPERATION_TYPES.DELETE_LOTTERY_CODE:
+        case OPERATION_TYPES.DELETE_LOTTERY_CODE:
           return '删除抽奖码';
         default:
           return operationType;
@@ -198,12 +198,12 @@ export const logLotteryDraw = (operationType: string) => {
         const prizeName = responseData.data && responseData.data.prize && responseData.data.prize.name;
 
         if (isWinner && prizeName) {
-          return `${operationType === OperationLog.OPERATION_TYPES.ONLINE_LOTTERY ? '线上' : '线下'}抽奖中奖: ${prizeName}`;
+          return `${operationType === OPERATION_TYPES.ONLINE_LOTTERY ? '线上' : '线下'}抽奖中奖: ${prizeName}`;
         } else {
-          return `${operationType === OperationLog.OPERATION_TYPES.ONLINE_LOTTERY ? '线上' : '线下'}抽奖未中奖`;
+          return `${operationType === OPERATION_TYPES.ONLINE_LOTTERY ? '线上' : '线下'}抽奖未中奖`;
         }
       } catch (error) {
-        return `${operationType === OperationLog.OPERATION_TYPES.ONLINE_LOTTERY ? '线上' : '线下'}抽奖`;
+        return `${operationType === OPERATION_TYPES.ONLINE_LOTTERY ? '线上' : '线下'}抽奖`;
       }
     },
     (req: Request, _res: Response, _data: any) => {
@@ -228,11 +228,11 @@ export const logUserOperation = (operationType: string) => {
         '未知用户';
 
       switch (operationType) {
-        case OperationLog.OPERATION_TYPES.CREATE_USER:
+        case OPERATION_TYPES.CREATE_USER:
           return `创建用户: ${username}`;
-        case OperationLog.OPERATION_TYPES.UPDATE_USER:
+        case OPERATION_TYPES.UPDATE_USER:
           return `更新用户: ${username}`;
-        case OperationLog.OPERATION_TYPES.DELETE_USER:
+        case OPERATION_TYPES.DELETE_USER:
           return `删除用户: ${username}`;
         default:
           return operationType;

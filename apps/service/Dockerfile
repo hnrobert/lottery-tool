@@ -17,8 +17,8 @@ RUN pnpm install
 # 复制项目文件
 COPY . .
 
-# 编译 TypeScript
-RUN pnpm build
+# 编译 TypeScript（build 产 dist/，build:scripts 产 scripts/dist/ 供运行时自动安装向导使用）
+RUN pnpm build && pnpm run build:scripts
 
 # 设置环境变量
 ENV NODE_ENV=production

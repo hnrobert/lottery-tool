@@ -1,13 +1,17 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { body, query, param, validationResult } from 'express-validator';
-import { User, OperationLog, Activity, LotteryRecord } from '../models';
-import { Op } from 'sequelize';
-import { logOperation } from '../middleware/operationLogger';
+import { And, In, LessThan, LessThanOrEqual, MoreThanOrEqual, Not } from 'typeorm';
 import bcrypt from 'bcryptjs';
 import moment from 'moment';
 import { authenticateToken, requireAdmin, requireSuperAdmin } from '../middleware/auth';
-import { getMaskedCosConfig, isCosConfigured } from '../utils/systemConfig';
-import * as cosClient from '../utils/cosClient';
+import { AppDataSource } from '../utils/database';
+import { User } from '../entities/user.entity';
+import { Activity } from '../entities/activity.entity';
+import { LotteryRecord } from '../entities/lottery-record.entity';
+import { OperationLog } from '../entities/operation-log.entity';
+import * as OperationLogService from '../services/operation-log.service';
+import * as UserService from '../services/user.service';
+import { getMaskedCosConfig } from '../utils/systemConfig';
 
 const router = express.Router();
 
@@ -21,7 +25,7 @@ router.use(requireAdmin);
 router.get('/users', [
   query('page').optional().isInt({ min: 1 }).withMessage('页码必须是正整数'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('每页数量必须在1-100之间'),
-  query('role').optional().isIn(['super_admin', 'admin', 'participant']).withMessage('角色必须是有效的角色类型'),
+  query('role').optional().isIn(['super_admin', 'admin']).withMessage('角色必须是有效的角色类型'),
   query('search').optional().isString().withMessage('搜索关键词必须是字符串')
 ], async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -42,24 +46,33 @@ router.get('/users', [
     } = req.query as any;
 
     const offset = (page - 1) * limit;
-    const where: Record<string, unknown> = {};
+
+    const qb = AppDataSource.getRepository(User)
+      .createQueryBuilder('user')
+      // 不取 password_hash
+      .select([
+        'user.id',
+        'user.username',
+        'user.email',
+        'user.role',
+        'user.status',
+        'user.created_at',
+        'user.updated_at',
+      ]);
 
     // 构建查询条件
-    if (role) where.role = role;
+    if (role) qb.andWhere('user.role = :role', { role });
     if (search) {
-      where[Op.or as any] = [
-        { username: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } }
-      ];
+      qb.andWhere('(user.username ILIKE :search OR user.email ILIKE :search)', {
+        search: `%${search}%`,
+      });
     }
 
-    const { count, rows } = await User.findAndCountAll({
-      where,
-      attributes: { exclude: ['password_hash'] },
-      order: [['created_at', 'DESC']],
-      limit: parseInt(limit),
-      offset: Math.floor(offset)
-    });
+    const [rows, count] = await qb
+      .orderBy('user.created_at', 'DESC')
+      .skip(Math.floor(offset))
+      .take(parseInt(limit))
+      .getManyAndCount();
 
     res.json({
       success: true,
@@ -94,8 +107,17 @@ router.get('/users/:id', [
 
     const { id } = req.params;
 
-    const user = await User.findByPk(id, {
-      attributes: { exclude: ['password_hash'] }
+    const user = await AppDataSource.getRepository(User).findOne({
+      where: { id: parseInt(id) },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        status: true,
+        created_at: true,
+        updated_at: true,
+      } as any,
     });
 
     if (!user) {
@@ -119,7 +141,8 @@ router.post('/users', [
   body('username').isLength({ min: 3, max: 50 }).withMessage('用户名长度必须在3-50个字符之间'),
   body('email').isEmail().withMessage('邮箱格式不正确'),
   body('password').isLength({ min: 6 }).withMessage('密码长度至少6个字符'),
-  body('role').isIn(['admin', 'participant']).withMessage('角色必须是admin或participant')
+  // 数据库角色枚举只有 admin / super_admin；此接口仅创建普通管理员
+  body('role').optional().isIn(['admin']).withMessage('角色必须是admin')
 ], async (req: Request, res: Response, next: NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -131,13 +154,11 @@ router.post('/users', [
       });
     }
 
-    const { username, email, password, role } = req.body;
+    const { username, email, password } = req.body;
 
     // 检查用户名和邮箱是否已存在
-    const existingUser = await User.findOne({
-      where: {
-        [Op.or]: [{ username }, { email }]
-      }
+    const existingUser = await AppDataSource.getRepository(User).findOne({
+      where: [{ username }, { email }],
     });
 
     if (existingUser) {
@@ -148,24 +169,29 @@ router.post('/users', [
     }
 
     // 创建用户
-    const user = await User.create({
+    const user = await AppDataSource.getRepository(User).save({
       username,
       email,
       password_hash: await bcrypt.hash(password, 10),
-      role
+      role: 'admin',
+      status: 'active',
     });
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'create_user', {
-      new_user_id: user.id,
-      username: user.username,
-      role: user.role
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: OperationLogService.OPERATION_TYPES.CREATE_USER,
+      operation_detail: `创建用户: ${user.username} (${user.role})`,
+      target_type: 'USER',
+      target_id: user.id,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.status(201).json({
       success: true,
       message: '用户创建成功',
-      data: user.toSafeJSON()
+      data: UserService.toSafeUser(user)
     });
   } catch (error) {
     next(error);
@@ -177,7 +203,7 @@ router.put('/users/:id', [
   param('id').isInt({ min: 1 }).withMessage('用户ID必须是正整数'),
   body('username').optional().isLength({ min: 3, max: 50 }).withMessage('用户名长度必须在3-50个字符之间'),
   body('email').optional().isEmail().withMessage('邮箱格式不正确'),
-  body('role').optional().isIn(['admin', 'participant']).withMessage('角色必须是admin或participant'),
+  body('role').optional().isIn(['admin', 'super_admin']).withMessage('角色必须是admin或super_admin'),
   body('status').optional().isIn(['active', 'inactive']).withMessage('状态必须是active或inactive')
 ], async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -193,7 +219,7 @@ router.put('/users/:id', [
     const { id } = req.params;
     const { username, email, role, status } = req.body;
 
-    const user = await User.findByPk(id);
+    const user = await UserService.findById(parseInt(id));
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -211,11 +237,13 @@ router.put('/users/:id', [
 
     // 检查用户名和邮箱是否已被其他用户使用
     if (username || email) {
-      const where: Record<string, unknown> = { id: { [Op.ne]: id } };
-      if (username) where.username = username;
-      if (email) where.email = email;
+      const qb = AppDataSource.getRepository(User)
+        .createQueryBuilder('user')
+        .where('user.id != :id', { id: parseInt(id) });
+      if (username) qb.andWhere('user.username = :username', { username });
+      if (email) qb.andWhere('user.email = :email', { email });
 
-      const existingUser = await User.findOne({ where });
+      const existingUser = await qb.getOne();
       if (existingUser) {
         return res.status(400).json({
           success: false,
@@ -225,24 +253,27 @@ router.put('/users/:id', [
     }
 
     // 更新用户信息
-    const updateData: Record<string, unknown> = {};
-    if (username) updateData.username = username;
-    if (email) updateData.email = email;
-    if (role) updateData.role = role;
-    if (status) updateData.status = status;
-
-    await user.update(updateData);
+    if (username) user.username = username;
+    if (email) user.email = email;
+    if (role) user.role = role;
+    if (status) user.status = status;
+    await AppDataSource.getRepository(User).save(user);
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'update_user', {
-      user_id: id,
-      updated_fields: Object.keys(updateData)
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: OperationLogService.OPERATION_TYPES.UPDATE_USER,
+      operation_detail: `更新用户: ${user.username}`,
+      target_type: 'USER',
+      target_id: user.id,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.json({
       success: true,
       message: '用户信息更新成功',
-      data: user.toSafeJSON()
+      data: UserService.toSafeUser(user)
     });
   } catch (error) {
     next(error);
@@ -267,7 +298,7 @@ router.put('/users/:id/reset-password', [
     const { id } = req.params;
     const { new_password } = req.body;
 
-    const user = await User.findByPk(id);
+    const user = await UserService.findById(parseInt(id));
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -284,14 +315,18 @@ router.put('/users/:id/reset-password', [
     }
 
     // 更新密码
-    await user.update({
-      password_hash: await bcrypt.hash(new_password, 10)
-    });
+    user.password_hash = await bcrypt.hash(new_password, 10);
+    await AppDataSource.getRepository(User).save(user);
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'reset_user_password', {
-      user_id: id,
-      username: user.username
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: 'RESET_USER_PASSWORD',
+      operation_detail: `重置用户密码: ${user.username}`,
+      target_type: 'USER',
+      target_id: user.id,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.json({
@@ -319,7 +354,7 @@ router.delete('/users/:id', [
 
     const { id } = req.params;
 
-    const user = await User.findByPk(id);
+    const user = await UserService.findById(parseInt(id));
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -344,13 +379,17 @@ router.delete('/users/:id', [
     }
 
     // 删除用户
-    await user.destroy();
+    await AppDataSource.getRepository(User).remove(user);
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'delete_user', {
-      deleted_user_id: id,
-      username: user.username,
-      role: user.role
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: OperationLogService.OPERATION_TYPES.DELETE_USER,
+      operation_detail: `删除用户: ${user.username} (${user.role})`,
+      target_type: 'USER',
+      target_id: user.id,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.json({
@@ -392,41 +431,24 @@ router.get('/logs', [
       end_date
     } = req.query as any;
 
-    const offset = (page - 1) * limit;
-    const where: Record<string, unknown> = {};
-
-    // 构建查询条件
-    if (user_id) where.user_id = user_id;
-    if (operation_type) where.operation_type = operation_type;
-    if (start_date || end_date) {
-      where.created_at = {};
-      if (start_date) (where.created_at as any)[Op.gte] = new Date(start_date);
-      if (end_date) (where.created_at as any)[Op.lte] = new Date(end_date);
-    }
-
-    const { count, rows } = await OperationLog.findAndCountAll({
-      where,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'username', 'email']
-        }
-      ],
-      order: [['created_at', 'DESC']],
-      limit: parseInt(limit),
-      offset: Math.floor(offset)
+    const result = await OperationLogService.getList({
+      page,
+      limit,
+      user_id,
+      operation_type,
+      start_date,
+      end_date,
     });
 
     res.json({
       success: true,
       data: {
-        logs: rows,
+        logs: result.logs,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
-          total: count,
-          total_pages: Math.ceil(count / limit)
+          total: (result.pagination as any).total,
+          total_pages: Math.ceil((result.pagination as any).total / limit)
         }
       }
     });
@@ -451,15 +473,12 @@ router.get('/logs/:id', [
 
     const { id } = req.params;
 
-    const log = await OperationLog.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'username', 'email']
-        }
-      ]
-    });
+    const log = await AppDataSource.getRepository(OperationLog)
+      .createQueryBuilder('log')
+      .leftJoinAndMapOne('log.user', User, 'user', 'user.id = log.user_id')
+      .addSelect(['user.id', 'user.username', 'user.email'])
+      .where('log.id = :id', { id: parseInt(id) })
+      .getOne();
 
     if (!log) {
       return res.status(404).json({
@@ -492,18 +511,19 @@ router.delete('/logs', [
     }
 
     const { before_date } = req.query;
-    const where: Record<string, unknown> = {};
 
-    if (before_date) {
-      where.created_at = { [Op.lt]: new Date(before_date as string) };
-    }
-
-    const deletedCount = await OperationLog.destroy({ where });
+    const result = await AppDataSource.getRepository(OperationLog).delete(
+      before_date ? { created_at: LessThan(new Date(before_date as string)) } : {},
+    );
+    const deletedCount = result.affected ?? 0;
 
     // 记录操作日志
-    (logOperation as any)((req as any).user.id, 'clear_operation_logs', {
-      deleted_count: deletedCount,
-      before_date: before_date || 'all'
+    await OperationLogService.log({
+      user_id: (req as any).user.id,
+      operation_type: 'CLEAR_OPERATION_LOGS',
+      operation_detail: `清空操作日志 ${deletedCount} 条（${before_date || '全部'}）`,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent') || null,
     });
 
     res.json({
@@ -520,25 +540,32 @@ router.delete('/logs', [
 // 获取系统概览信息
 router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // 用户统计
-    const totalUsers = await User.count();
-    const adminUsers = await User.count({ where: { role: { [Op.in]: ['admin', 'super_admin'] } } });
-    const participantUsers = await User.count({ where: { role: 'participant' } });
+    const userRepo = AppDataSource.getRepository(User);
+    const activityRepo = AppDataSource.getRepository(Activity);
+
+    // 用户统计（角色枚举只有 super_admin / admin）
+    const [totalUsers, adminUsers] = await Promise.all([
+      userRepo.count(),
+      userRepo.count({ where: { role: In(['admin', 'super_admin']) } }),
+    ]);
+    const participantUsers = totalUsers - adminUsers;
 
     // 活动统计
-    const totalActivities = await Activity.count();
-    const activeActivities = await Activity.count({ where: { status: 'active' } });
-    const inactiveActivities = await Activity.count({ where: { status: 'inactive' } });
+    const [totalActivities, activeActivities] = await Promise.all([
+      activityRepo.count(),
+      activityRepo.count({ where: { status: 'active' } }),
+    ]);
+    // 非进行中（draft + ended）计为 inactive
+    const inactiveActivities = totalActivities - activeActivities;
 
     // 抽奖记录统计
-    const totalRecords = await LotteryRecord.count();
-    const todayRecords = await LotteryRecord.count({
-      where: {
-        created_at: {
-          [Op.gte]: new Date().setHours(0, 0, 0, 0)
-        }
-      }
-    });
+    const recordRepo = AppDataSource.getRepository(LotteryRecord);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [totalRecords, todayRecords] = await Promise.all([
+      recordRepo.count(),
+      recordRepo.count({ where: { created_at: MoreThanOrEqual(today) } }),
+    ]);
 
     // 系统运行时间（这里简化处理，实际可以从配置文件读取启动时间）
     const uptime = process.uptime();
@@ -577,7 +604,7 @@ router.get('/health', async (req: Request, res: Response, next: NextFunction) =>
     // 检查数据库连接
     let dbStatus = 'unknown';
     try {
-      await User.findOne({ limit: 1 });
+      await AppDataSource.getRepository(User).findOneBy({ id: 1 } as any);
       dbStatus = 'healthy';
     } catch (error) {
       dbStatus = 'unhealthy';

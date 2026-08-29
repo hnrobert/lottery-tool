@@ -6,14 +6,18 @@
   "main": "dist/app.js",
   "scripts": {
     "build": "tsc",
+    "build:scripts": "tsup --silent",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.test.json",
     "start": "node dist/app.js",
-    "dev": "tsc --watch & nodemon --watch dist dist/app.js",
-    "install-system": "node scripts/install.js",
-    "db:init": "node scripts/db-init.js",
+    "dev": "tsup --config tsup.dev.config.ts",
+    "migration:run": "pnpm run --silent build:scripts && node scripts/dist/migration-run.mjs",
+    "migration:revert": "pnpm run --silent build:scripts && node scripts/dist/migration-revert.mjs",
+    "migration:generate": "pnpm run --silent build:scripts && node scripts/dist/migration-generate.mjs",
+    "migration:check": "pnpm run --silent build:scripts && node scripts/dist/migration-check.mjs",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:api": "node scripts/test-apis.js"
+    "test:api": "pnpm run --silent build:scripts && node scripts/dist/test-apis.mjs"
   },
   "keywords": [
     "lottery",
@@ -36,39 +40,57 @@
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.29.4",
     "multer": "^1.4.5-lts.1",
-    "mysql2": "^3.6.5",
-    "sequelize": "^6.35.2",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^1.1.0",
     "winston": "^3.11.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "@types/node": "^20.14.0",
-    "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17",
-    "@types/jsonwebtoken": "^9.0.6",
     "@types/bcryptjs": "^2.4.6",
-    "@types/multer": "^1.4.11",
-    "@types/moment": "^2.13.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/inquirer": "^8.2.13",
     "@types/jest": "^29.5.8",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/moment": "^2.13.0",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^6.0.3",
     "axios": "^1.6.2",
     "jest": "^29.7.0",
-    "nodemon": "^3.0.2",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.4.12",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.4"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "jest": {
     "testEnvironment": "node",
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
+    },
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json"
+    ],
     "testMatch": [
-      "**/__tests__/**/*.js",
-      "**/?(*.)+(spec|test).js"
+      "**/__tests__/**/*.ts",
+      "**/?(*.)+(spec|test).ts"
     ],
     "collectCoverageFrom": [
       "dist/**/*.js",
       "!dist/app.js",
-      "!dist/config/database.js",
+      "!dist/utils/database.js",
       "!**/node_modules/**"
     ],
     "coverageDirectory": "coverage",
@@ -78,7 +100,7 @@
       "html"
     ],
     "setupFilesAfterEnv": [
-      "<rootDir>/tests/setup.js"
+      "<rootDir>/tests/setup.ts"
     ],
     "testTimeout": 30000
   }

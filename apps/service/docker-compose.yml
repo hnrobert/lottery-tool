@@ -1,37 +1,67 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: lottery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lottery
+      POSTGRES_PASSWORD: lottery
+      POSTGRES_DB: lottery_system
+    ports:
+      - "5432:5432"
+    volumes:
+      # PG 18+ 约定：单一挂载点在 /var/lib/postgresql（数据落在其子目录，便于 pg_upgrade）
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lottery -d lottery_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   lottery-backend:
     build: .
     container_name: lottery-backend
     restart: unless-stopped
     ports:
       - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       # 数据库配置 - 请根据你的实际数据库配置修改
-      DB_HOST: your-database-host
-      DB_PORT: 3306
+      DB_HOST: postgres
+      DB_PORT: 5432
       DB_NAME: lottery_system
-      DB_USER: your-db-user
-      DB_PASSWORD: your-db-password
-      
+      DB_USER: lottery
+      DB_PASSWORD: lottery
+
       # JWT配置
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 24h
-      
+
+      # 超级管理员引导（可选）：同时设置用户名/密码且库为空时，启动即创建超管；
+      # 未设置时由首位 POST /auth/register 注册的用户成为超管
+      # SUPER_ADMIN_USERNAME: admin
+      # SUPER_ADMIN_PASSWORD: change-me-in-production
+      # SUPER_ADMIN_EMAIL: admin@example.com
+
       # 应用配置
       NODE_ENV: production
       PORT: 3000
       CORS_ORIGIN: "*"
-      
+
       # Docker环境标识
       DOCKER_ENV: true
     volumes:
       - ./logs:/app/logs
-      - ./config:/app/config
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s 
+      start_period: 60s
+
+volumes:
+  pgdata:

@@ -2,120 +2,21 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import path from 'path';
-import fs from 'fs';
-import { spawn } from 'child_process';
 import dotenv from 'dotenv';
-import { sequelize } from './config/database';
+import { initDataSource } from './utils/database';
+import { seedSuperAdminFromEnv } from './services/user.service';
 import errorHandler from './middleware/errorHandler';
 
 dotenv.config();
 
-// 检查是否在Docker环境中
-const isDockerEnvironment = (): boolean => {
+// 检查是否在Docker/生产环境中（数据库连接失败时不退出，等待依赖就绪）
+const isRuntimeEnvironment = (): boolean => {
   return process.env.DOCKER_ENV === 'true' ||
          process.env.NODE_ENV === 'production' ||
-         fs.existsSync('/.dockerenv');
-};
-
-// 自动安装系统
-const autoInstallSystem = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    console.log('\n=== 检测到系统未安装，正在启动自动安装流程 ===\n');
-
-    // 使用spawn运行安装脚本
-    const installProcess = spawn('node', ['scripts/install.js'], {
-      cwd: path.join(__dirname, '..'),
-      stdio: 'inherit' // 继承父进程的stdio，这样可以看到安装过程的交互
-    });
-
-    installProcess.on('close', (code) => {
-      if (code === 0) {
-        console.log('\n=== 自动安装完成 ===\n');
-        resolve();
-      } else {
-        reject(new Error(`安装进程退出，退出码: ${code}`));
-      }
-    });
-
-    installProcess.on('error', (error) => {
-      reject(new Error(`安装进程启动失败: ${error.message}`));
-    });
-  });
-};
-
-// 检查系统是否已安装，如果未安装则自动安装
-const checkAndInstallSystem = async (): Promise<void> => {
-  // 在Docker环境中跳过自动安装
-  if (isDockerEnvironment()) {
-    console.log('\n=== Docker环境检测到，跳过自动安装 ===\n');
-    console.log('请确保系统已正确配置，包括：');
-    console.log('1. 数据库连接配置');
-    console.log('2. 系统配置文件 (config/system.json)');
-    console.log('3. 环境变量设置');
-    console.log('=====================================\n');
-    return;
-  }
-
-  const configPath = path.join(__dirname, '../config/system.json');
-
-  // 检查配置文件是否存在
-  if (!fs.existsSync(configPath)) {
-    console.log('\n=== 抽奖系统首次启动 ===');
-    console.log('系统配置文件不存在，将自动进入安装流程...');
-    console.log('========================\n');
-
-    try {
-      await autoInstallSystem();
-      // 安装完成后重新检查
-      return checkAndInstallSystem();
-    } catch (error: any) {
-      console.error('自动安装失败:', error.message);
-      console.log('\n请手动运行安装脚本：npm run install-system');
-      process.exit(1);
-    }
-  }
-
-  // 检查安装状态
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (!config.installed) {
-      console.log('\n=== 系统未完成安装 ===');
-      console.log('检测到安装未完成，将自动重新安装...');
-      console.log('===================\n');
-
-      try {
-        await autoInstallSystem();
-        // 安装完成后重新检查
-        return checkAndInstallSystem();
-      } catch (error: any) {
-        console.error('自动安装失败:', error.message);
-        console.log('\n请手动运行安装脚本：npm run install-system');
-        process.exit(1);
-      }
-    }
-
-    console.log('\n=== 系统已安装，正在启动服务 ===\n');
-  } catch (error: any) {
-    console.error('读取系统配置文件失败:', error.message);
-    console.log('配置文件可能损坏，将重新安装...');
-
-    try {
-      await autoInstallSystem();
-      // 安装完成后重新检查
-      return checkAndInstallSystem();
-    } catch (installError: any) {
-      console.error('自动安装失败:', installError.message);
-      console.log('\n请手动运行安装脚本：npm run install-system');
-      process.exit(1);
-    }
-  }
+         false;
 };
 
 export const createApp = async (): Promise<void> => {
-  // 检查安装状态，如果未安装则自动安装
-  await checkAndInstallSystem();
-
   const app = express();
 
   // 安全中间件
@@ -149,17 +50,18 @@ export const createApp = async (): Promise<void> => {
     next();
   });
 
-  // 数据库连接
+  // 数据库连接 + 自动应用pending迁移（与 pnpm migration:run 同一代码路径）
+  // 超级管理员引导：配置了 SUPER_ADMIN_USERNAME/PASSWORD 则启动时播种；
+  // 否则首位通过 /auth/register 注册的用户自动成为超级管理员
   try {
-    await sequelize.authenticate();
-    console.info('数据库连接成功');
-
-    // 导入模型关联
-    require('./models');
+    await initDataSource();
+    if (await seedSuperAdminFromEnv()) {
+      console.log(`[bootstrap] 已按环境变量创建超级管理员: ${process.env.SUPER_ADMIN_USERNAME}`);
+    }
   } catch (error) {
     console.error('数据库连接失败:', error);
-    // 在Docker环境中，如果数据库连接失败，不要立即退出
-    if (isDockerEnvironment()) {
+    // 在Docker/生产环境中，如果数据库连接失败，不要立即退出
+    if (isRuntimeEnvironment()) {
       console.log('数据库连接失败，但应用将继续启动...');
       console.log('请检查数据库配置和环境变量');
     } else {

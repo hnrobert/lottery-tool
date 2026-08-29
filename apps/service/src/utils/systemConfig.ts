@@ -1,8 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-
-const CONFIG_PATH = path.join(__dirname, '../../config/system.json');
-
 export interface CosConfig {
   secret_id: string;
   secret_key: string;
@@ -19,27 +14,6 @@ export interface MaskedCosConfig {
   region: string;
   custom_domain: string;
   path_prefix: string;
-}
-
-export function readConfig(): Record<string, unknown> {
-  try {
-    if (!fs.existsSync(CONFIG_PATH)) {
-      return {};
-    }
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (error: any) {
-    console.error('读取系统配置文件失败:', error.message);
-    return {};
-  }
-}
-
-export function writeConfig(config: Record<string, unknown>): void {
-  const dir = path.dirname(CONFIG_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
 }
 
 /**

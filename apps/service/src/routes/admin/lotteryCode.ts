@@ -2,9 +2,10 @@ import express, { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { logLotteryCodeOperation } from '../../middleware/operationLogger';
 import { createError } from '../../utils/customError';
-import LotteryCode from '../../models/LotteryCode';
-import Activity from '../../models/Activity';
-import OperationLog from '../../models/OperationLog';
+import { AppDataSource } from '../../utils/database';
+import { LotteryCode } from '../../entities/lottery-code.entity';
+import * as LotteryCodeService from '../../services/lottery-code.service';
+import { OPERATION_TYPES } from '../../services/operation-log.service';
 
 const router = express.Router();
 
@@ -16,6 +17,13 @@ const validateRequest = (req: Request, res: Response, next: NextFunction): void 
   }
   next();
 };
+
+// 按ID查找抽奖码（带活动信息，用于权限校验）
+const findCodeWithActivity = (lotteryCodeId: string | number): Promise<LotteryCode | null> =>
+  AppDataSource.getRepository(LotteryCode).findOne({
+    where: { id: parseInt(String(lotteryCodeId)) },
+    relations: { activity: true },
+  });
 
 /**
  * @route   PUT /api/admin/lottery-codes/:id/participant-info
@@ -39,32 +47,25 @@ router.put('/:id/participant-info', [
     .withMessage('邮箱格式不正确')
 ],
 validateRequest,
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.UPDATE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.UPDATE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lotteryCodeId = req.params.id;
     const { participant_info } = req.body;
 
-    const lotteryCode = await LotteryCode.findByPk(lotteryCodeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity'
-        }
-      ]
-    });
+    const lotteryCode = await findCodeWithActivity(lotteryCodeId);
 
     if (!lotteryCode) {
       throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (lotteryCode as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && lotteryCode.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能修改自己创建的活动的抽奖码');
     }
 
     // 更新参与者信息
-    await lotteryCode.updateParticipantInfo(participant_info);
+    await LotteryCodeService.updateParticipantInfo(lotteryCode, participant_info);
 
     res.json({
       success: true,
@@ -133,22 +134,14 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lotteryCodeId = req.params.id;
 
-    const lotteryCode = await LotteryCode.findByPk(lotteryCodeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'created_by']
-        }
-      ]
-    });
+    const lotteryCode = await findCodeWithActivity(lotteryCodeId);
 
     if (!lotteryCode) {
       throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (lotteryCode as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && lotteryCode.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动的抽奖码');
     }
 
@@ -185,33 +178,26 @@ router.put('/:id', [
     .withMessage('邮箱格式不正确')
 ],
 validateRequest,
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.UPDATE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.UPDATE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lotteryCodeId = req.params.id;
     const { participant_info } = req.body;
 
-    const lotteryCode = await LotteryCode.findByPk(lotteryCodeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity'
-        }
-      ]
-    });
+    const lotteryCode = await findCodeWithActivity(lotteryCodeId);
 
     if (!lotteryCode) {
       throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (lotteryCode as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && lotteryCode.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能修改自己创建的活动的抽奖码');
     }
 
     // 只允许修改参与者信息，不允许修改抽奖码本身
     if (participant_info) {
-      await lotteryCode.updateParticipantInfo(participant_info);
+      await LotteryCodeService.updateParticipantInfo(lotteryCode, participant_info);
     }
 
     res.json({
@@ -232,35 +218,28 @@ async (req: Request, res: Response, next: NextFunction) => {
  * @access  Private (Admin)
  */
 router.delete('/:id',
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.DELETE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.DELETE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lotteryCodeId = req.params.id;
 
-    const lotteryCode = await LotteryCode.findByPk(lotteryCodeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity'
-        }
-      ]
-    });
+    const lotteryCode = await findCodeWithActivity(lotteryCodeId);
 
     if (!lotteryCode) {
       throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (lotteryCode as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && lotteryCode.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能删除自己创建的活动的抽奖码');
     }
 
     // 检查抽奖码是否已使用
-    if (lotteryCode.isUsed()) {
+    if (lotteryCode.status === 'used') {
       throw createError('VALIDATION_INVALID_FORMAT', '已使用的抽奖码无法删除');
     }
 
-    await lotteryCode.destroy();
+    await AppDataSource.getRepository(LotteryCode).remove(lotteryCode);
 
     res.json({
       success: true,

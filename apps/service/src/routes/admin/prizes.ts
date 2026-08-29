@@ -2,9 +2,10 @@ import express, { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { logPrizeOperation } from '../../middleware/operationLogger';
 import { createError } from '../../utils/customError';
-import Prize from '../../models/Prize';
-import Activity from '../../models/Activity';
-import OperationLog from '../../models/OperationLog';
+import { AppDataSource } from '../../utils/database';
+import { Prize } from '../../entities/prize.entity';
+import * as PrizeService from '../../services/prize.service';
+import { OPERATION_TYPES } from '../../services/operation-log.service';
 
 const router = express.Router();
 
@@ -17,6 +18,13 @@ const validateRequest = (req: Request, res: Response, next: NextFunction): void 
   next();
 };
 
+// 按ID查找奖品（带活动信息）
+const findPrizeWithActivity = (prizeId: string | number): Promise<Prize | null> =>
+  AppDataSource.getRepository(Prize).findOne({
+    where: { id: parseInt(String(prizeId)) },
+    relations: { activity: true },
+  });
+
 /**
  * @route   GET /api/admin/prizes/:id
  * @desc    获取奖品详情
@@ -26,22 +34,14 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const prizeId = req.params.id;
 
-    const prize = await Prize.findByPk(prizeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'created_by']
-        }
-      ]
-    });
+    const prize = await findPrizeWithActivity(prizeId);
 
     if (!prize) {
       throw createError('VALIDATION_INVALID_FORMAT', '奖品不存在');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (prize as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && prize.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动的奖品');
     }
 
@@ -88,33 +88,28 @@ router.put('/:id', [
     .withMessage('排序值必须是非负整数')
 ],
 validateRequest,
-logPrizeOperation(OperationLog.OPERATION_TYPES.UPDATE_PRIZE),
+logPrizeOperation(OPERATION_TYPES.UPDATE_PRIZE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const prizeId = req.params.id;
     const updateData = req.body;
 
-    const prize = await Prize.findByPk(prizeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity'
-        }
-      ]
-    });
+    const prize = await findPrizeWithActivity(prizeId);
 
     if (!prize) {
       throw createError('VALIDATION_INVALID_FORMAT', '奖品不存在');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (prize as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && prize.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能修改自己创建的活动的奖品');
     }
 
     // 如果更新概率，验证概率总和
     if (updateData.probability !== undefined) {
-      const validation = await Prize.validateProbabilities(prize.activity_id);
+      const validation = await PrizeService.validateProbabilities(prize.activity_id, {
+        excludeId: prize.id,
+      });
       const currentProbability = parseFloat(String(prize.probability));
       const newProbability = parseFloat(updateData.probability);
       const newTotal = validation.totalProbability - currentProbability + newProbability;
@@ -132,12 +127,16 @@ async (req: Request, res: Response, next: NextFunction) => {
       updateData.remaining_quantity = newRemainingQuantity;
     }
 
-    await prize.update(updateData);
+    if (updateData.probability !== undefined) {
+      updateData.probability = String(updateData.probability);
+    }
+
+    const updated = await PrizeService.updatePrize(prize, updateData);
 
     res.json({
       success: true,
       data: {
-        prize
+        prize: updated
       },
       message: '奖品更新成功'
     });
@@ -152,26 +151,19 @@ async (req: Request, res: Response, next: NextFunction) => {
  * @access  Private (Admin)
  */
 router.delete('/:id',
-logPrizeOperation(OperationLog.OPERATION_TYPES.DELETE_PRIZE),
+logPrizeOperation(OPERATION_TYPES.DELETE_PRIZE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const prizeId = req.params.id;
 
-    const prize = await Prize.findByPk(prizeId, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity'
-        }
-      ]
-    });
+    const prize = await findPrizeWithActivity(prizeId);
 
     if (!prize) {
       throw createError('VALIDATION_INVALID_FORMAT', '奖品不存在');
     }
 
     // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && (prize as any).activity.created_by !== (req as any).user.id) {
+    if ((req as any).user.role !== 'super_admin' && prize.activity.created_by !== (req as any).user.id) {
       throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能删除自己创建的活动的奖品');
     }
 
@@ -181,7 +173,7 @@ async (req: Request, res: Response, next: NextFunction) => {
       throw createError('VALIDATION_INVALID_FORMAT', '已有用户获得此奖品，无法删除');
     }
 
-    await prize.destroy();
+    await AppDataSource.getRepository(Prize).remove(prize);
 
     res.json({
       success: true,

@@ -2,7 +2,7 @@
 
 🌍 中文版 | [English](README.md)
 
-一个支持多种抽奖模式的完整抽奖系统后端服务，基于 Node.js + Express.js + MySQL 构建。
+一个支持多种抽奖模式的完整抽奖系统后端服务，基于 Node.js + Express.js + PostgreSQL 构建。
 提供符合OpenAPI规范的json协议文档，方便前端开发人员查看和测试API。
 
 ## 功能特点
@@ -17,8 +17,8 @@
 ## 技术栈
 
 - **后端框架**：Node.js + Express.js
-- **数据库**：MySQL 8.0+
-- **ORM**：Sequelize
+- **数据库**：PostgreSQL 16+
+- **ORM**：TypeORM 1.1
 - **认证**：JWT
 - **日志**：Winston
 - **验证**：express-validator
@@ -28,7 +28,7 @@
 ### 1. 环境要求
 
 - Node.js >= 16.0.0
-- MySQL >= 8.0
+- PostgreSQL >= 16
 - npm 或 yarn
 
 ### 2. 安装依赖
@@ -37,23 +37,9 @@
 pnpm install
 ```
 
-### 3. 系统初始化
+### 3. 启动服务（无安装向导）
 
-初次启动时，将会自动进入安装程序，引导您完成数据库配置、管理员账户创建等步骤。
-
-若安装失败，您可以使用自动化安装脚本：
-
-```bash
-pnpm run install-system
-```
-
-安装脚本将引导您：
-- 配置数据库连接
-- 创建数据库和表结构
-- 设置超级管理员账户
-- 生成配置文件
-
-### 4. 启动服务
+首次启动时迁移会自动建表。**首位通过 `/auth/register` 注册的用户自动成为超级管理员**；此后注册需要超级管理员令牌。
 
 ```bash
 # 生产模式
@@ -63,7 +49,25 @@ pnpm start
 pnpm dev
 ```
 
-### 5. 测试API
+创建首位超级管理员（两种方式任选其一）：
+
+方式一：环境变量（部署友好，库为空时启动自动创建）
+
+```env
+SUPER_ADMIN_USERNAME=admin
+SUPER_ADMIN_PASSWORD=your_password1
+SUPER_ADMIN_EMAIL=admin@example.com   # 可选
+```
+
+方式二：首位注册（未配置上述变量时生效）
+
+```bash
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","email":"admin@example.com","password":"your_password1"}'
+```
+
+### 4. 测试API
 
 运行自动化测试确保系统正常工作：
 
@@ -76,7 +80,7 @@ pnpm test
 系统支持以下抽奖码格式：
 
 | 格式代码 | 描述 | 示例 |
-|---------|------|------|
+| --------- | ------ | ------ |
 | `4_digit_number` | 4位纯数字 | 1234 |
 | `8_digit_number` | 8位纯数字 | 12345678 |
 | `8_digit_alphanumeric` | 8位数字+小写字母 | 12a34b56 |
@@ -84,6 +88,7 @@ pnpm test
 | `12_digit_alphanumeric` | 12位数字+字母 | 12a34B56c78D |
 
 ## API使用示例
+
 具体请参考API文档, 并已提供OpenAPI协议，你可以将``openapi.json`` 导入到Swagger UI更多其他API工具中进行测试。
 
 ### 管理员登录
@@ -164,45 +169,38 @@ curl -X POST http://localhost:3000/api/webhook/activities/WEBHOOK_ID/lottery-cod
 
 ## 目录结构
 
-```
-backend-2/
+```text
+apps/service/
 ├── src/
-│   ├── app.js                 # 应用入口
-│   ├── config/
-│   │   └── database.js        # 数据库配置
+│   ├── app.ts                 # 应用入口（启动即跑迁移）
+│   ├── entities/              # TypeORM 实体（表结构唯一来源）
+│   ├── migrations/            # 自动生成的迁移 + index.ts barrel
+│   ├── services/              # 业务服务（原 model 静态方法）
 │   ├── middleware/
-│   │   ├── auth.js           # 认证中间件
-│   │   ├── errorHandler.js   # 错误处理
-│   │   └── operationLogger.js # 操作日志
-│   ├── models/               # 数据模型
-│   │   ├── User.js
-│   │   ├── Activity.js
-│   │   ├── Prize.js
-│   │   ├── LotteryCode.js
-│   │   ├── LotteryRecord.js
-│   │   └── OperationLog.js
+│   │   ├── auth.ts           # 认证中间件
+│   │   ├── errorHandler.ts   # 错误处理
+│   │   └── operationLogger.ts # 操作日志
 │   ├── routes/               # 路由
-│   │   ├── auth.js          # 认证路由
+│   │   ├── auth.ts          # 认证路由（首位注册即超管）
 │   │   ├── admin/           # 管理员路由
-│   │   ├── lottery.js       # 抽奖路由
-│   │   ├── webhook.js       # Webhook路由
-│   │   └── system.js        # 系统管理路由
-│   └── utils/               # 工具函数
-│       ├── logger.js
-│       ├── customError.js
-│       └── lotteryCodeGenerator.js
-├── scripts/
-│   ├── install.js           # 安装脚本
-│   └── test-apis.js         # API测试脚本
-├── logs/                    # 日志文件
-├── config/                  # 配置文件
+│   │   ├── lottery.ts       # 抽奖路由
+│   │   ├── webhook.ts       # Webhook路由
+│   │   └── system.ts        # 系统管理路由
+│   └── utils/
+│       ├── database.ts      # DataSource（PG 连接 + 迁移执行）
+│       ├── logger.ts
+│       ├── customError.ts
+│       └── lotteryCodeGenerator.ts
+├── scripts/                  # 迁移 CLI + API 冒烟（tsup 构建到 scripts/dist）
+├── tsup.config.ts / tsup.dev.config.ts
+├── docker-compose.yml        # 含 PostgreSQL 18 服务
 ├── package.json
 └── README.md
 ```
 
 ## 环境变量 ENV
 
-系统运行时需要以下环境变量（安装脚本会自动生成）：
+系统运行时需要以下环境变量（参照 `.env.example` 配置，或通过环境变量注入）：
 
 ```env
 # 服务器配置
@@ -211,9 +209,9 @@ NODE_ENV=production
 
 # 数据库配置
 DB_HOST=localhost
-DB_PORT=3306
+DB_PORT=5432
 DB_NAME=lottery_system
-DB_USER=root
+DB_USER=postgres
 DB_PASSWORD=your_password
 
 # JWT配置
@@ -229,19 +227,18 @@ LOG_FILE=logs/app.log
 
 ### 问题解决
 
-之前的 `ELIFECYCLE Command failed with exit code 1` 错误是因为应用在Docker环境中尝试运行交互式安装脚本，但Docker容器是非交互式的。
+应用无交互式安装步骤：容器启动时自动应用迁移，随后通过 `/auth/register` 注册首位超级管理员即可。
 
 ### 解决方案
 
-#### 1. 修改了应用启动逻辑
+#### 1. 启动逻辑
 
-- 在Docker环境中自动跳过交互式安装
-- 添加了Docker环境检测
-- 数据库连接失败时不会立即退出应用
+- 容器启动时自动应用数据库迁移
+- 数据库连接失败时不会立即退出（等待依赖就绪）
 
 #### 2. 使用方法
 
-**方法一：使用Docker Compose（推荐）**
+#### 方法一：使用 Docker Compose（推荐）
 
 1. 修改 `docker-compose.yml` 中的数据库配置：
 
@@ -252,19 +249,19 @@ environment:
   DB_PASSWORD: your-actual-db-password
 ```
 
-2. 启动服务：
+1. 启动服务：
 
 ```bash
 docker-compose up -d
 ```
 
-3. 查看日志：
+1. 查看日志：
 
 ```bash
 docker-compose logs -f lottery-backend
 ```
 
-**方法二：单独使用Docker**
+#### 方法二：单独使用 Docker
 
 1. 构建镜像：
 
@@ -272,7 +269,7 @@ docker-compose logs -f lottery-backend
 docker build -t lottery-backend .
 ```
 
-2. 运行容器（需要设置环境变量）：
+1. 运行容器（需要设置环境变量）：
 
 ```bash
 docker run -d \
@@ -297,7 +294,7 @@ docker run -d \
 
 可选的环境变量：
 
-- `DB_PORT`: 数据库端口（默认：3306）
+- `DB_PORT`: 数据库端口（默认：5432）
 - `PORT`: 应用端口（默认：3000）
 - `NODE_ENV`: 环境（默认：production）
 - `CORS_ORIGIN`: CORS来源（默认：*）
@@ -325,15 +322,34 @@ docker logs lottery-backend
 2. 确保数据库服务可访问
 3. 查看详细日志：`docker logs lottery-backend`
 
-
 ## 开发说明
+
+### 数据库迁移（TypeORM + PostgreSQL）
+
+表结构由 `src/entities/` 实体定义，通过自动生成的迁移（`src/migrations/`）管理，`synchronize` 始终关闭。服务启动时会自动应用未执行的迁移。
+
+```bash
+# 改动实体后，生成迁移（diff 实体与数据库），然后把新类注册进 src/migrations/index.ts
+pnpm migration:generate --name=AddUserAvatar
+
+# 应用 / 回滚一步迁移
+pnpm migration:run
+pnpm migration:revert
+
+# commit 守卫：实体改动必须伴随已注册的新迁移（提交信息含 "bypass migration check" 可跳过）
+pnpm migration:check
+```
+
+约定：迁移文件为 `<时间戳>-<PascalName>.ts`（up/down 执行 SQL 数组）；生成产物需人工审查（生成器已自动按「约束→索引→表→类型」重排 down 语句）。
+
 ### 添加新的抽奖码格式
 
-1. 在 `src/utils/lotteryCodeGenerator.js` 中添加新格式
+1. 在 `src/utils/lotteryCodeGenerator.ts` 中添加新格式
 2. 更新验证规则
 3. 更新API文档
 
 ## 故障排除
+
 ### 日志查看
 
 ```bash

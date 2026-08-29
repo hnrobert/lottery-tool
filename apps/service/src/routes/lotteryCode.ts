@@ -1,9 +1,20 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { query, param, validationResult, body } from 'express-validator';
-import { LotteryCode, Activity } from '../models';
-import { Op } from 'sequelize';
+import { In } from 'typeorm';
+import { AppDataSource } from '../utils/database';
+import { LotteryCode } from '../entities/lottery-code.entity';
+import { Activity } from '../entities/activity.entity';
 
 const router = express.Router();
+
+// 按条件查找抽奖码（带活动信息）
+const findCodeWithActivity = async (
+  where: { code: string; activity_id?: number },
+): Promise<LotteryCode | null> =>
+  AppDataSource.getRepository(LotteryCode).findOne({
+    where: where as any,
+    relations: { activity: true },
+  });
 
 // 查询抽奖码信息
 router.get('/query', [
@@ -21,22 +32,13 @@ router.get('/query', [
     }
 
     const { code, activity_id } = req.query;
-    const where: Record<string, unknown> = { code };
+    const where: { code: string; activity_id?: number } = { code: String(code) };
 
     if (activity_id) {
-      where.activity_id = activity_id;
+      where.activity_id = parseInt(String(activity_id));
     }
 
-    const lotteryCode = await LotteryCode.findOne({
-      where,
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status', 'start_time', 'end_time', 'lottery_mode']
-        }
-      ]
-    });
+    const lotteryCode = await findCodeWithActivity(where);
 
     if (!lotteryCode) {
       return res.status(404).json({
@@ -45,7 +47,7 @@ router.get('/query', [
       });
     }
 
-    const activity = (lotteryCode as any).activity;
+    const activity = lotteryCode.activity;
 
     // 检查活动状态
     if (activity.status !== 'active') {
@@ -108,22 +110,13 @@ router.get('/validate/:code', [
 
     const { code } = req.params;
     const { activity_id } = req.query;
-    const where: Record<string, unknown> = { code };
+    const where: { code: string; activity_id?: number } = { code };
 
     if (activity_id) {
-      where.activity_id = activity_id;
+      where.activity_id = parseInt(String(activity_id));
     }
 
-    const lotteryCode = await LotteryCode.findOne({
-      where,
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status', 'start_time', 'end_time']
-        }
-      ]
-    });
+    const lotteryCode = await findCodeWithActivity(where);
 
     if (!lotteryCode) {
       return res.json({
@@ -135,7 +128,7 @@ router.get('/validate/:code', [
       });
     }
 
-    const activity = (lotteryCode as any).activity;
+    const activity = lotteryCode.activity;
 
     // 检查活动状态
     if (activity.status !== 'active') {
@@ -219,10 +212,12 @@ router.get('/stats/:activity_id', [
     }
 
     const { activity_id } = req.params;
+    const repo = AppDataSource.getRepository(LotteryCode);
 
     // 检查活动是否存在
-    const activity = await Activity.findByPk(activity_id);
-    if (!activity) {
+    const activityExists = await AppDataSource.getRepository(Activity)
+      .count({ where: { id: parseInt(activity_id) } });
+    if (!activityExists) {
       return res.status(404).json({
         success: false,
         message: '活动不存在'
@@ -230,22 +225,12 @@ router.get('/stats/:activity_id', [
     }
 
     // 统计抽奖码
-    const totalCodes = await LotteryCode.count({
-      where: { activity_id }
+    const totalCodes = await repo.count({ where: { activity_id: parseInt(activity_id) } });
+    const usedCodes = await repo.count({
+      where: { activity_id: parseInt(activity_id), status: 'used' as any },
     });
-
-    const usedCodes = await LotteryCode.count({
-      where: {
-        activity_id,
-        status: 'used'
-      }
-    });
-
-    const invalidCodes = await LotteryCode.count({
-      where: {
-        activity_id,
-        status: 'invalid'
-      }
+    const invalidCodes = await repo.count({
+      where: { activity_id: parseInt(activity_id), status: 'invalid' as any },
     });
 
     const unusedCodes = totalCodes - usedCodes - invalidCodes;
@@ -284,21 +269,15 @@ router.post('/batch-validate', [
     }
 
     const { codes, activity_id } = req.body;
-    const where: Record<string, unknown> = { code: { [Op.in]: codes } };
+    const where: { code: any; activity_id?: number } = { code: In(codes) };
 
     if (activity_id) {
-      where.activity_id = activity_id;
+      where.activity_id = parseInt(activity_id);
     }
 
-    const lotteryCodes = await LotteryCode.findAll({
-      where,
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status', 'start_time', 'end_time']
-        }
-      ]
+    const lotteryCodes = await AppDataSource.getRepository(LotteryCode).find({
+      where: where as any,
+      relations: { activity: true },
     });
 
     const results = codes.map((code: string) => {
@@ -312,7 +291,7 @@ router.post('/batch-validate', [
         };
       }
 
-      const activity = (lotteryCode as any).activity;
+      const activity = lotteryCode.activity;
 
       // 检查活动状态
       if (activity.status !== 'active') {

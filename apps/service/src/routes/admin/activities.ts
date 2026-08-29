@@ -1,13 +1,17 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { body, query, validationResult } from 'express-validator';
+import { In } from 'typeorm';
 import { logActivityOperation, logLotteryCodeOperation, logPrizeOperation } from '../../middleware/operationLogger';
 import { createError } from '../../utils/customError';
 import { generateBatchLotteryCodes, validateLotteryCodeFormat } from '../../utils/lotteryCodeGenerator';
-import Activity from '../../models/Activity';
-import Prize from '../../models/Prize';
-import LotteryCode from '../../models/LotteryCode';
-import LotteryRecord from '../../models/LotteryRecord';
-import OperationLog from '../../models/OperationLog';
+import { AppDataSource } from '../../utils/database';
+import { Activity } from '../../entities/activity.entity';
+import { LotteryCode } from '../../entities/lottery-code.entity';
+import * as ActivityService from '../../services/activity.service';
+import * as PrizeService from '../../services/prize.service';
+import * as LotteryCodeService from '../../services/lottery-code.service';
+import * as LotteryRecordService from '../../services/lottery-record.service';
+import { OPERATION_TYPES } from '../../services/operation-log.service';
 
 const router = express.Router();
 
@@ -18,6 +22,20 @@ const validateRequest = (req: Request, res: Response, next: NextFunction): void 
     return next(createError('VALIDATION_INVALID_FORMAT', '请求参数验证失败', errors.array()));
   }
   next();
+};
+
+// 验证活动存在且当前用户有权限
+const requireActivityAccess = async (activityId: string, req: Request): Promise<Activity> => {
+  const activity = await ActivityService.findById(parseInt(activityId));
+  if (!activity) {
+    throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
+  }
+
+  if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
+    throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能访问自己创建的活动');
+  }
+
+  return activity;
 };
 
 /**
@@ -37,7 +55,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     const { page = 1, limit = 10, search, status } = req.query as any;
     const userId = (req as any).user.id;
 
-    const activities = await Activity.findByCreator(userId, {
+    const activities = await ActivityService.findByCreator(userId, {
       page,
       limit,
       search,
@@ -62,31 +80,12 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
 
-    const activity = await Activity.findByPk(activityId, {
-      include: [
-        {
-          model: Prize,
-          as: 'prizes',
-          order: [['sort_order', 'ASC']]
-        }
-      ]
-    });
-
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    // 检查用户权限（只能查看自己创建的活动，超级管理员除外）
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
     // 获取抽奖码统计
-    const lotteryCodesCount = await LotteryCode.count({
-      where: { activity_id: activityId }
-    });
+    const lotteryCodesCount = await LotteryCodeService.countByActivity(parseInt(activityId));
 
-    const activityData = activity.toJSON() as unknown as Record<string, unknown>;
+    const activityData: Record<string, unknown> = { ...activity };
     activityData.lottery_codes_count = lotteryCodesCount;
 
     res.json({
@@ -142,7 +141,7 @@ router.post('/', [
     .withMessage('抽奖码格式不正确')
 ],
 validateRequest,
-logActivityOperation(OperationLog.OPERATION_TYPES.CREATE_ACTIVITY),
+logActivityOperation(OPERATION_TYPES.CREATE_ACTIVITY),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, description, lottery_mode, start_time, end_time, settings } = req.body;
@@ -152,7 +151,7 @@ async (req: Request, res: Response, next: NextFunction) => {
       throw createError('VALIDATION_INVALID_FORMAT', '开始时间必须早于结束时间');
     }
 
-    const activityData: Record<string, unknown> = {
+    const activityData: Partial<Activity> = {
       name,
       description,
       lottery_mode,
@@ -162,7 +161,7 @@ async (req: Request, res: Response, next: NextFunction) => {
       status: 'draft'
     };
 
-    // 设置活动配置
+    // 设置活动配置（默认值由服务层补全）
     if (settings) {
       activityData.settings = {
         max_lottery_codes: settings.max_lottery_codes || 1000,
@@ -172,7 +171,7 @@ async (req: Request, res: Response, next: NextFunction) => {
       };
     }
 
-    const activity = await Activity.create(activityData as any);
+    const activity = await ActivityService.createActivity(activityData);
 
     res.status(201).json({
       success: true,
@@ -218,21 +217,13 @@ router.put('/:id', [
     .withMessage('结束时间格式错误')
 ],
 validateRequest,
-logActivityOperation(OperationLog.OPERATION_TYPES.UPDATE_ACTIVITY),
+logActivityOperation(OPERATION_TYPES.UPDATE_ACTIVITY),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
     const updateData = req.body;
 
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能修改自己创建的活动');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
     // 验证时间逻辑
     const startTime = updateData.start_time ? new Date(updateData.start_time) : activity.start_time;
@@ -242,13 +233,19 @@ async (req: Request, res: Response, next: NextFunction) => {
       throw createError('VALIDATION_INVALID_FORMAT', '开始时间必须早于结束时间');
     }
 
-    // 更新活动
-    await activity.update(updateData);
+    // 更新活动（时间字段转Date）
+    if (updateData.start_time) updateData.start_time = new Date(updateData.start_time);
+    if (updateData.end_time) updateData.end_time = new Date(updateData.end_time);
+
+    const updated = await AppDataSource.getRepository(Activity).save({
+      ...activity,
+      ...updateData,
+    });
 
     res.json({
       success: true,
       data: {
-        activity
+        activity: updated
       },
       message: '活动更新成功'
     });
@@ -263,27 +260,19 @@ async (req: Request, res: Response, next: NextFunction) => {
  * @access  Private (Admin)
  */
 router.delete('/:id',
-logActivityOperation(OperationLog.OPERATION_TYPES.DELETE_ACTIVITY),
+logActivityOperation(OPERATION_TYPES.DELETE_ACTIVITY),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
 
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能删除自己创建的活动');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
     // 检查活动状态
     if (activity.status === 'active') {
       throw createError('VALIDATION_INVALID_FORMAT', '不能删除进行中的活动');
     }
 
-    await activity.destroy();
+    await AppDataSource.getRepository(Activity).remove(activity);
 
     res.json({
       success: true,
@@ -312,17 +301,9 @@ async (req: Request, res: Response, next: NextFunction) => {
     const activityId = req.params.id;
     const { page = 1, limit = 20, search, status, has_participant_info } = req.query as any;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
+    await requireActivityAccess(activityId, req);
 
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动');
-    }
-
-    const result = await LotteryCode.findByActivity(parseInt(activityId), {
+    const result = await LotteryCodeService.findByActivity(parseInt(activityId), {
       page,
       limit,
       search,
@@ -350,21 +331,13 @@ router.post('/:id/lottery-codes/batch', [
     .withMessage('创建数量必须是1-1000的整数')
 ],
 validateRequest,
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.BATCH_CREATE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.BATCH_CREATE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
     const { count } = req.body;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
     // 获取活动设置
     const settings = activity.settings || {};
@@ -372,22 +345,20 @@ async (req: Request, res: Response, next: NextFunction) => {
     const maxLotteryCodes = settings.max_lottery_codes || 1000;
 
     // 检查是否超过最大限制
-    const existingCount = await LotteryCode.count({
-      where: { activity_id: activityId }
-    });
+    const existingCount = await LotteryCodeService.countByActivity(parseInt(activityId));
 
     if (existingCount + count > maxLotteryCodes) {
       throw createError('VALIDATION_OUT_OF_RANGE', `超过活动最大抽奖码限制 ${maxLotteryCodes}`);
     }
 
     // 获取已存在的抽奖码
-    const existingCodes = await LotteryCode.getAllCodesForActivity(parseInt(activityId));
+    const existingCodes = await LotteryCodeService.getAllCodesForActivity(parseInt(activityId));
 
     // 生成新的抽奖码
     const newCodes = generateBatchLotteryCodes(lotteryCodeFormat as string, count, existingCodes);
 
     // 批量创建抽奖码
-    const createdCodes = await LotteryCode.createBatch(parseInt(activityId), newCodes);
+    const createdCodes = await LotteryCodeService.createBatch(parseInt(activityId), newCodes);
 
     res.status(201).json({
       success: true,
@@ -411,15 +382,7 @@ router.get('/:id/webhook-info', async (req: Request, res: Response, next: NextFu
   try {
     const activityId = req.params.id;
 
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    // 检查用户权限
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
     const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
 
@@ -464,21 +427,13 @@ router.post('/:id/lottery-codes', [
     .withMessage('邮箱格式不正确')
 ],
 validateRequest,
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.CREATE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.CREATE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
     const { code, participant_info } = req.body;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
     // 验证抽奖码格式
     const settings = activity.settings || {};
@@ -489,23 +444,21 @@ async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // 检查抽奖码是否已存在
-    const existingCode = await LotteryCode.findByActivityAndCode(parseInt(activityId), code);
+    const existingCode = await LotteryCodeService.findByActivityAndCode(parseInt(activityId), code);
     if (existingCode) {
       throw createError('BUSINESS_LOTTERY_CODE_EXISTS', '抽奖码已存在');
     }
 
     // 检查是否超过最大限制
     const maxLotteryCodes = settings.max_lottery_codes || 1000;
-    const existingCount = await LotteryCode.count({
-      where: { activity_id: activityId }
-    });
+    const existingCount = await LotteryCodeService.countByActivity(parseInt(activityId));
 
     if (existingCount >= maxLotteryCodes) {
       throw createError('VALIDATION_OUT_OF_RANGE', `超过活动最大抽奖码限制 ${maxLotteryCodes}`);
     }
 
     // 创建抽奖码
-    const lotteryCode = await LotteryCode.create({
+    const lotteryCode = await AppDataSource.getRepository(LotteryCode).save({
       activity_id: parseInt(activityId),
       code: code,
       participant_info: participant_info || null,
@@ -530,20 +483,12 @@ async (req: Request, res: Response, next: NextFunction) => {
  * @access  Private (Admin)
  */
 router.post('/:id/lottery-codes/import',
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.IMPORT_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.IMPORT_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
+    await requireActivityAccess(activityId, req);
 
     // 这里应该处理文件上传和解析
     // 由于没有配置multer，先返回一个占位响应
@@ -569,36 +514,16 @@ router.put('/:id/lottery-codes/:code/invalidate', [
   body('reason').optional().isString().isLength({ max: 500 }).withMessage('作废原因不能超过500字符')
 ],
 validateRequest,
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.INVALIDATE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.INVALIDATE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
     const { code } = req.params;
     const { reason } = req.body;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
-
-    const lotteryCode = await LotteryCode.findOne({
-      where: {
-        code: code,
-        activity_id: parseInt(activityId)
-      },
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status']
-        }
-      ]
-    });
+    const lotteryCode = await LotteryCodeService.findByActivityAndCode(parseInt(activityId), code);
 
     if (!lotteryCode) {
       throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND', '抽奖码不存在');
@@ -610,7 +535,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // 标记为作废
-    await lotteryCode.markAsInvalid();
+    await LotteryCodeService.markAsInvalid(lotteryCode);
 
     res.json({
       success: true,
@@ -621,7 +546,7 @@ async (req: Request, res: Response, next: NextFunction) => {
           code: lotteryCode.code,
           status: lotteryCode.status,
           activity_id: lotteryCode.activity_id,
-          activity_name: (lotteryCode as any).activity.name,
+          activity_name: activity.name,
           reason: reason || '管理员作废',
           invalidated_at: new Date()
         }
@@ -643,35 +568,20 @@ router.put('/:id/lottery-codes/batch-invalidate', [
   body('reason').optional().isString().isLength({ max: 500 }).withMessage('作废原因不能超过500字符')
 ],
 validateRequest,
-logLotteryCodeOperation(OperationLog.OPERATION_TYPES.BATCH_INVALIDATE_LOTTERY_CODE),
+logLotteryCodeOperation(OPERATION_TYPES.BATCH_INVALIDATE_LOTTERY_CODE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
     const { codes, reason } = req.body;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
+    const activity = await requireActivityAccess(activityId, req);
 
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
-
-    const { Op } = require('sequelize');
-    const lotteryCodes = await LotteryCode.findAll({
+    const lotteryCodes = await AppDataSource.getRepository(LotteryCode).find({
       where: {
-        code: { [Op.in]: codes },
-        activity_id: parseInt(activityId)
+        code: In(codes),
+        activity_id: parseInt(activityId),
       },
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          attributes: ['id', 'name', 'status']
-        }
-      ]
+      relations: { activity: true },
     });
 
     const results: any[] = [];
@@ -699,13 +609,13 @@ async (req: Request, res: Response, next: NextFunction) => {
       }
 
       try {
-        await lotteryCode.markAsInvalid();
+        await LotteryCodeService.markAsInvalid(lotteryCode);
         results.push({
           code,
           success: true,
           message: '作废成功',
           lottery_code_id: lotteryCode.id,
-          activity_name: (lotteryCode as any).activity.name
+          activity_name: activity.name
         });
         invalidatedCodes.push(code);
       } catch (error: any) {
@@ -752,18 +662,10 @@ async (req: Request, res: Response, next: NextFunction) => {
     const activityId = req.params.id;
     const { page = 1, limit = 20, keyword } = req.query as any;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
-
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动');
-    }
+    await requireActivityAccess(activityId, req);
 
     // 获取抽奖记录列表
-    const result = await LotteryRecord.findByActivity(parseInt(activityId), {
+    const result = await LotteryRecordService.findByActivity(parseInt(activityId), {
       page,
       limit,
       keyword
@@ -790,15 +692,15 @@ async (req: Request, res: Response, next: NextFunction) => {
         operator: record.operator?.username
       };
 
-      // 只有存在时才添加这些字段
-      if (record.lotteryCode?.phone) {
-        simplified.phone = record.lotteryCode.phone;
+      // 只有存在时才添加参与者信息（来自抽奖码的JSON字段）
+      if (record.lotteryCode?.participant_info?.phone) {
+        simplified.phone = record.lotteryCode.participant_info.phone;
       }
-      if (record.lotteryCode?.email) {
-        simplified.email = record.lotteryCode.email;
+      if (record.lotteryCode?.participant_info?.email) {
+        simplified.email = record.lotteryCode.participant_info.email;
       }
-      if (record.lotteryCode?.participant_name) {
-        simplified.name = record.lotteryCode.participant_name;
+      if (record.lotteryCode?.participant_info?.name) {
+        simplified.name = record.lotteryCode.participant_info.name;
       }
 
       return simplified;
@@ -825,17 +727,9 @@ router.get('/:id/prizes', async (req: Request, res: Response, next: NextFunction
   try {
     const activityId = req.params.id;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
+    await requireActivityAccess(activityId, req);
 
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能查看自己创建的活动');
-    }
-
-    const prizes = await Prize.findByActivity(parseInt(activityId));
+    const prizes = await PrizeService.findByActivity(parseInt(activityId));
 
     res.json({
       success: true,
@@ -879,30 +773,15 @@ router.post('/:id/prizes', [
     .withMessage('排序值必须是非负整数')
 ],
 validateRequest,
-logPrizeOperation(OperationLog.OPERATION_TYPES.CREATE_PRIZE),
+logPrizeOperation(OPERATION_TYPES.CREATE_PRIZE),
 async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activityId = req.params.id;
     const { name, description, total_quantity, probability, sort_order } = req.body;
 
-    // 验证活动存在且有权限
-    const activity = await Activity.findByPk(activityId);
-    if (!activity) {
-      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
-    }
+    await requireActivityAccess(activityId, req);
 
-    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
-      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
-    }
-
-    // 验证概率总和
-    const validation = await Prize.validateProbabilities(parseInt(activityId));
-    if (validation.totalProbability + probability > 1) {
-      throw createError('VALIDATION_OUT_OF_RANGE',
-        `奖品概率总和不能超过1，当前总和: ${validation.totalProbability}`);
-    }
-
-    const prize = await Prize.create({
+    const prize = await PrizeService.createPrize({
       activity_id: parseInt(activityId),
       name,
       description,

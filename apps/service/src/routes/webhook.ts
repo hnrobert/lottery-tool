@@ -3,8 +3,10 @@ import { body, validationResult } from 'express-validator';
 import { authenticateWebhook } from '../middleware/auth';
 import { createError } from '../utils/customError';
 import { validateLotteryCodeFormat } from '../utils/lotteryCodeGenerator';
-import LotteryCode from '../models/LotteryCode';
-import OperationLog from '../models/OperationLog';
+import * as LotteryCodeService from '../services/lottery-code.service';
+import * as OperationLogService from '../services/operation-log.service';
+import { AppDataSource } from '../utils/database';
+import { LotteryCode } from '../entities/lottery-code.entity';
 
 const router = express.Router();
 
@@ -65,9 +67,7 @@ async (req: Request, res: Response, next: NextFunction) => {
     const maxLotteryCodes = settings.max_lottery_codes || 1000;
 
     // 检查是否超过最大限制
-    const existingCount = await LotteryCode.count({
-      where: { activity_id: activity.id }
-    });
+    const existingCount = await LotteryCodeService.countByActivity(activity.id);
 
     if (existingCount + lottery_codes.length > maxLotteryCodes) {
       throw createError('VALIDATION_OUT_OF_RANGE', `批量添加后将超过活动最大抽奖码限制 ${maxLotteryCodes}`);
@@ -91,7 +91,7 @@ async (req: Request, res: Response, next: NextFunction) => {
         }
 
         // 检查抽奖码是否已存在
-        const existingCode = await LotteryCode.findByActivityAndCode(activity.id, code);
+        const existingCode = await LotteryCodeService.findByActivityAndCode(activity.id, code);
         if (existingCode) {
           failedCodes.push(code);
           failedCount++;
@@ -99,20 +99,20 @@ async (req: Request, res: Response, next: NextFunction) => {
         }
 
         // 创建抽奖码
-        const lotteryCode = await LotteryCode.create({
+        const lotteryCode = await AppDataSource.getRepository(LotteryCode).save({
           activity_id: activity.id,
-          code: code,
-          participant_info: participant_info || null,
-          status: 'unused'
+          code,
+          participant_info: (participant_info as LotteryCode['participant_info']) || null,
+          status: 'unused',
         });
 
         createdCodes.push(lotteryCode);
         createdCount++;
 
         // 记录操作日志
-        await OperationLog.log({
+        await OperationLogService.log({
           user_id: null, // Webhook调用没有用户ID
-          operation_type: OperationLog.OPERATION_TYPES.WEBHOOK_CREATE_LOTTERY_CODE,
+          operation_type: OperationLogService.OPERATION_TYPES.WEBHOOK_CREATE_LOTTERY_CODE,
           operation_detail: `Webhook创建抽奖码: ${code}`,
           target_type: 'ACTIVITY',
           target_id: activity.id,
