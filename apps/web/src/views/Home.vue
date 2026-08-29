@@ -1,7 +1,7 @@
 <template>
   <div class="home">
     <!-- Hero Section -->
-    <section class="hero bg-gradient-to-br from-blue-50 to-indigo-100 py-16 px-4">
+    <section class="hero bg-linear-to-br from-blue-50 to-indigo-100 py-16 px-4">
       <div class="container mx-auto max-w-4xl text-center">
         <h1 class="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
           智能抽奖工具

@@ -136,7 +136,7 @@
         <div 
           :class="[
             'flex space-x-4 transition-all duration-300',
-            isAtBottom ? 'justify-start py-3 border-t static' : 'justify-start fixed bottom-0 z-10 -mx-4 px-4 py-3 w-full bg-white/80 backdrop-blur-lg border-t-1'
+            isAtBottom ? 'justify-start py-3 border-t static' : 'justify-start fixed bottom-0 z-10 -mx-4 px-4 py-3 w-full bg-white/80 backdrop-blur-lg border-t'
           ]"
         >
           <Button 

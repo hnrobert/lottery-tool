@@ -29,7 +29,7 @@
               <FormLabel>活动描述</FormLabel>
               <FormControl>
                 <textarea 
-                  class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder="请输入活动描述"
                   v-bind="componentField"
                 ></textarea>
@@ -197,7 +197,7 @@
         <div 
           :class="[
             'flex space-x-4 transition-all duration-300',
-             isAtBottom ? 'justify-start py-3 border-t static' : 'justify-start fixed bottom-0 z-10 -mx-4 px-4 py-3 w-full bg-white/80 backdrop-blur-lg border-t-1'
+             isAtBottom ? 'justify-start py-3 border-t static' : 'justify-start fixed bottom-0 z-10 -mx-4 px-4 py-3 w-full bg-white/80 backdrop-blur-lg border-t'
           ]"
         >
           <Button 
