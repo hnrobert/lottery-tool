@@ -24,8 +24,6 @@ import type {
   LotteryRecordListParams,
   Pagination,
   DrawLotteryResponse,
-  CosConfig,
-  CosConfigResponse,
   UploadSignatureRequest,
   UploadSignatureResponse,
 } from './types/api';
@@ -242,11 +240,6 @@ export const systemApi = {
     });
   },
 
-  // 获取COS配置
-  async getCosConfig(): Promise<CosConfigResponse> {
-    return apiFetch('/system/cos-config');
-  },
-
   };
 
 // 管理员模块 - 活动管理 API
@@ -353,12 +346,16 @@ export const adminActivityApi = {
     });
   },
 
-  // 上传签字
+  // 上传签字（PNG data URL 直接存库）
   async uploadSignature(activityId: number, recordId: number, data: UploadSignatureRequest): Promise<UploadSignatureResponse> {
     return apiFetch(`/lottery/activities/${activityId}/records/${recordId}/signature`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+  // 获取签字图片（列表接口不返回大字段，预览时按需获取）
+  async fetchSignature(activityId: number, recordId: number): Promise<UploadSignatureResponse> {
+    return apiFetch(`/lottery/activities/${activityId}/records/${recordId}/signature`);
   },
 };
 

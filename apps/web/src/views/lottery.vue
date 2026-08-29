@@ -108,7 +108,7 @@
           <DialogTitle class="text-center space-y-4">
             <div v-if="lotteryResult?.is_winner" class="space-y-4">
               <div class="text-6xl animate-bounce">🎉</div>
-              <h2 class="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+              <h2 class="text-2xl font-bold bg-linear-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
                 恭喜中奖！
               </h2>
             </div>
@@ -123,7 +123,7 @@
         
         <div class="text-center space-y-6 py-4">
           <div v-if="lotteryResult?.is_winner" class="space-y-4">
-            <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100">
+            <div class="bg-linear-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100">
               <p class="text-sm text-green-700 font-medium mb-2">您获得的奖品</p>
               <p class="text-2xl font-bold text-green-800 mb-3">{{ lotteryResult.prize?.name }}</p>
               <p v-if="lotteryResult.prize?.description" class="text-green-600 text-sm leading-relaxed">
@@ -153,7 +153,7 @@
           <div class="w-full flex justify-center">
             <button 
               @click="closeResult"
-              class="px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium rounded-xl transition-all duration-200 shadow-lg transform"
+              class="px-8 py-3 bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium rounded-xl transition-all duration-200 shadow-lg transform"
             >
               确定
             </button>

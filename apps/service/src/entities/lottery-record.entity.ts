@@ -62,13 +62,9 @@ export class LotteryRecord {
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   user_agent!: string | null;
 
-  /** 签字图片在COS中的对象键 */
-  @Column({ name: 'signature_key', type: 'varchar', length: 512, nullable: true })
-  signature_key!: string | null;
-
-  /** 签字图片访问URL（预签名或公开URL） */
-  @Column({ name: 'signature_url', type: 'text', nullable: true })
-  signature_url!: string | null;
+  /** 签字图片（PNG data URL，直接存库，列表查询不返回此大字段） */
+  @Column({ name: 'signature_data', type: 'text', nullable: true })
+  signature_data!: string | null;
 
   /** 签字时间 */
   @Column({ name: 'signed_at', type: 'timestamp', nullable: true })

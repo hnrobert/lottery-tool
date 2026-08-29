@@ -15,7 +15,7 @@
       </div>
       <div class="flex gap-2">
         <Select v-model="searchParams.role" @update:model-value="handleSearch">
-          <SelectTrigger class="w-[140px]">
+          <SelectTrigger class="w-35">
             <SelectValue placeholder="选择角色" />
           </SelectTrigger>
           <SelectContent>
@@ -24,7 +24,7 @@
           </SelectContent>
         </Select>
         <Select v-model="searchParams.status" @update:model-value="handleSearch">
-          <SelectTrigger class="w-[140px]">
+          <SelectTrigger class="w-35">
             <SelectValue placeholder="选择状态" />
           </SelectTrigger>
           <SelectContent>

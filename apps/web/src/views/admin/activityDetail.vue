@@ -205,7 +205,7 @@ const columns: TableColumn[] = [
     render: (_value: unknown, row: unknown) => {
       const record = row as LotteryRecord;
       const isSigned = record.signature_status === 'signed';
-      if (isSigned && record.signature_url) {
+      if (isSigned) {
         return h('button', {
           class: 'inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium',
           onClick: () => openSignaturePreview(record),
@@ -275,16 +275,20 @@ const handleSearch = useDebounceFn(() => {
   fetchLotteryRecords();
 }, 500);
 
-// 打开签字预览
-const openSignaturePreview = (record: LotteryRecord) => {
-  if (record.signature_url) {
-    previewSignatureUrl.value = record.signature_url;
+// 打开签字预览（按需拉取 data URL，列表数据不含签字大字段）
+const openSignaturePreview = async (record: LotteryRecord) => {
+  try {
+    const res = await API.adminActivity.fetchSignature(activityId, record.id);
+    if (!res.signature_data) return;
+    previewSignatureUrl.value = res.signature_data;
     previewRecordInfo.value = {
       code: record.lotteryCode || '-',
       name: record.name || '-',
-      signedAt: record.signed_at ? new Date(record.signed_at).toLocaleString('zh-CN') : '-',
+      signedAt: res.signed_at ? new Date(res.signed_at).toLocaleString('zh-CN') : '-',
     };
     showSignaturePreview.value = true;
+  } catch (err) {
+    console.error('获取签字图片失败:', err);
   }
 };
 

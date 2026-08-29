@@ -63,8 +63,6 @@ export interface LotteryRecord {
   operator_id?: number;
   ip_address?: string;
   user_agent?: string;
-  signature_key?: string;
-  signature_url?: string;
   signed_at?: string;
   signature_status?: 'unsigned' | 'signed';
   created_at: string;
@@ -237,29 +235,15 @@ export interface DrawLotteryResponse {
 }
 
 // COS 配置类型
-export interface CosConfig {
-  secret_id: string;
-  secret_key: string;
-  bucket: string;
-  region: string;
-  custom_domain?: string;
-  path_prefix?: string;
-}
-
-export interface CosConfigResponse {
-  configured: boolean;
-  config: CosConfig;
-}
-
 export interface UploadSignatureRequest {
   image: string;
 }
 
 export interface UploadSignatureResponse {
   record_id: number;
-  signature_key: string;
-  signature_url: string;
-  signed_at: string;
+  signature_status?: 'unsigned' | 'signed';
+  signature_data?: string;
+  signed_at?: string;
 }
 
 // i18n 相关类型

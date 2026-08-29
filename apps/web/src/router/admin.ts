@@ -104,14 +104,6 @@ const adminRoutes: RouteRecordRaw[] = [
           title: 'Settings',
         },
       },
-      {
-        path: 'super-settings',
-        name: 'Settings(Super)',
-        component: () => import('../views/admin/superSettings.vue'),
-        meta: {
-          title: 'Settings',
-        },
-      },
     ],
   },
 ];
