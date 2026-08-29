@@ -80,3 +80,6 @@ temp/
 
 # tsup dev bundle
 .dev/
+
+# vue-tsc -b 构建副产物
+apps/web/vite.config.d.ts

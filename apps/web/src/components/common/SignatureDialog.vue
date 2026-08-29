@@ -126,7 +126,8 @@ function resizeCanvas() {
   // 重新初始化 signature_pad
   if (signaturePad.value) {
     const data = signaturePad.value.toData();
-    signaturePad.value = new SignaturePad(canvas, {
+    // signature_pad 5.x 的 Options 类型未收录 onEnd 回调，运行时支持，整体断言
+    signaturePad.value = new SignaturePad(canvas, ({
       backgroundColor: 'rgb(255, 255, 255)',
       penColor: 'rgb(0, 0, 0)',
       minWidth: 1,
@@ -136,7 +137,7 @@ function resizeCanvas() {
         canUndo.value = true;
         saveState();
       },
-    });
+    }) as any);
     if (data && data.length > 0) {
       signaturePad.value.fromData(data);
       isEmpty.value = false;
@@ -159,7 +160,7 @@ function initSignaturePad() {
   const canvas = canvasRef.value;
   if (!canvas) return;
 
-  signaturePad.value = new SignaturePad(canvas, {
+  signaturePad.value = new SignaturePad(canvas, ({
     backgroundColor: 'rgb(255, 255, 255)',
     penColor: 'rgb(0, 0, 0)',
     minWidth: 1,
@@ -169,7 +170,7 @@ function initSignaturePad() {
       canUndo.value = true;
       saveState();
     },
-  });
+  }) as any);
 
   isEmpty.value = true;
   canUndo.value = false;
