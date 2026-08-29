@@ -2,6 +2,47 @@ import bcrypt from 'bcryptjs';
 import { AppDataSource } from '../utils/database';
 import { User, UserRole } from '../entities/user.entity';
 
+/**
+ * 启动时按环境变量播种超级管理员（可选）。
+ *
+ * 仅当 SUPER_ADMIN_USERNAME 与 SUPER_ADMIN_PASSWORD 同时设置、且用户表为空时生效；
+ * 与 /auth/register 的首位注册互斥（同一把 advisory lock），返回是否已播种。
+ */
+export async function seedSuperAdminFromEnv(): Promise<boolean> {
+  const username = process.env.SUPER_ADMIN_USERNAME?.trim();
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const email = process.env.SUPER_ADMIN_EMAIL?.trim() || null;
+
+  if (!username || !password) {
+    return false; // 未配置，走首位注册引导
+  }
+
+  if (!/^[a-zA-Z0-9_]{3,50}$/.test(username)) {
+    console.warn('[bootstrap] SUPER_ADMIN_USERNAME 不合法（3-50位字母/数字/下划线），已跳过播种');
+    return false;
+  }
+
+  return AppDataSource.transaction(async (manager) => {
+    // 与首位注册共用锁，防止并发引导产生两个超管
+    await manager.query(`SELECT pg_advisory_xact_lock(hashtext('auth_register_bootstrap'))`);
+
+    const userCount = await manager.getRepository(User).count();
+    if (userCount > 0) {
+      return false; // 已有用户：env 播种仅作为空库引导，不覆盖既有账号
+    }
+
+    await manager.getRepository(User).save({
+      username,
+      email,
+      password_hash: await hashPassword(password),
+      role: 'super_admin',
+      status: 'active',
+    });
+
+    return true;
+  });
+}
+
 export interface SafeUser {
   id: number;
   username: string;

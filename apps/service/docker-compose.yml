@@ -41,6 +41,12 @@ services:
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 24h
 
+      # 超级管理员引导（可选）：同时设置用户名/密码且库为空时，启动即创建超管；
+      # 未设置时由首位 POST /auth/register 注册的用户成为超管
+      # SUPER_ADMIN_USERNAME: admin
+      # SUPER_ADMIN_PASSWORD: change-me-in-production
+      # SUPER_ADMIN_EMAIL: admin@example.com
+
       # 应用配置
       NODE_ENV: production
       PORT: 3000

@@ -49,7 +49,17 @@ pnpm start
 pnpm dev
 ```
 
-创建首位超级管理员：
+创建首位超级管理员（两种方式任选其一）：
+
+方式一：环境变量（部署友好，库为空时启动自动创建）
+
+```env
+SUPER_ADMIN_USERNAME=admin
+SUPER_ADMIN_PASSWORD=your_password1
+SUPER_ADMIN_EMAIL=admin@example.com   # 可选
+```
+
+方式二：首位注册（未配置上述变量时生效）
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
@@ -70,7 +80,7 @@ pnpm test
 系统支持以下抽奖码格式：
 
 | 格式代码 | 描述 | 示例 |
-|---------|------|------|
+| --------- | ------ | ------ |
 | `4_digit_number` | 4位纯数字 | 1234 |
 | `8_digit_number` | 8位纯数字 | 12345678 |
 | `8_digit_alphanumeric` | 8位数字+小写字母 | 12a34b56 |
@@ -78,6 +88,7 @@ pnpm test
 | `12_digit_alphanumeric` | 12位数字+字母 | 12a34B56c78D |
 
 ## API使用示例
+
 具体请参考API文档, 并已提供OpenAPI协议，你可以将``openapi.json`` 导入到Swagger UI更多其他API工具中进行测试。
 
 ### 管理员登录
@@ -158,7 +169,7 @@ curl -X POST http://localhost:3000/api/webhook/activities/WEBHOOK_ID/lottery-cod
 
 ## 目录结构
 
-```
+```text
 apps/service/
 ├── src/
 │   ├── app.ts                 # 应用入口（启动即跑迁移）
@@ -227,7 +238,7 @@ LOG_FILE=logs/app.log
 
 #### 2. 使用方法
 
-**方法一：使用Docker Compose（推荐）**
+#### 方法一：使用 Docker Compose（推荐）
 
 1. 修改 `docker-compose.yml` 中的数据库配置：
 
@@ -238,19 +249,19 @@ environment:
   DB_PASSWORD: your-actual-db-password
 ```
 
-2. 启动服务：
+1. 启动服务：
 
 ```bash
 docker-compose up -d
 ```
 
-3. 查看日志：
+1. 查看日志：
 
 ```bash
 docker-compose logs -f lottery-backend
 ```
 
-**方法二：单独使用Docker**
+#### 方法二：单独使用 Docker
 
 1. 构建镜像：
 
@@ -258,7 +269,7 @@ docker-compose logs -f lottery-backend
 docker build -t lottery-backend .
 ```
 
-2. 运行容器（需要设置环境变量）：
+1. 运行容器（需要设置环境变量）：
 
 ```bash
 docker run -d \
@@ -311,7 +322,6 @@ docker logs lottery-backend
 2. 确保数据库服务可访问
 3. 查看详细日志：`docker logs lottery-backend`
 
-
 ## 开发说明
 
 ### 数据库迁移（TypeORM + PostgreSQL）
@@ -339,6 +349,7 @@ pnpm migration:check
 3. 更新API文档
 
 ## 故障排除
+
 ### 日志查看
 
 ```bash

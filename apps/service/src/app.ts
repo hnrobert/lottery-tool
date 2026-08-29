@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { initDataSource } from './utils/database';
+import { seedSuperAdminFromEnv } from './services/user.service';
 import errorHandler from './middleware/errorHandler';
 
 dotenv.config();
@@ -50,9 +51,13 @@ export const createApp = async (): Promise<void> => {
   });
 
   // 数据库连接 + 自动应用pending迁移（与 pnpm migration:run 同一代码路径）
-  // 首位通过 /auth/register 注册的用户自动成为超级管理员，无需安装向导
+  // 超级管理员引导：配置了 SUPER_ADMIN_USERNAME/PASSWORD 则启动时播种；
+  // 否则首位通过 /auth/register 注册的用户自动成为超级管理员
   try {
     await initDataSource();
+    if (await seedSuperAdminFromEnv()) {
+      console.log(`[bootstrap] 已按环境变量创建超级管理员: ${process.env.SUPER_ADMIN_USERNAME}`);
+    }
   } catch (error) {
     console.error('数据库连接失败:', error);
     // 在Docker/生产环境中，如果数据库连接失败，不要立即退出

@@ -49,7 +49,17 @@ pnpm start
 pnpm dev
 ```
 
-Create the first super admin:
+Create the first super admin (either way):
+
+Option A: environment variables (deployment-friendly; auto-created on boot when the user table is empty)
+
+```env
+SUPER_ADMIN_USERNAME=admin
+SUPER_ADMIN_PASSWORD=your_password1
+SUPER_ADMIN_EMAIL=admin@example.com   # optional
+```
+
+Option B: first registration (effective when the variables above are unset)
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
@@ -70,7 +80,7 @@ pnpm test
 The system supports the following lottery code formats:
 
 | Format Code | Description | Example |
-|-------------|-------------|----------|
+| ------------- | ------------- | ---------- |
 | `4_digit_number` | 4-digit numbers only | 1234 |
 | `8_digit_number` | 8-digit numbers only | 12345678 |
 | `8_digit_alphanumeric` | 8-digit numbers + lowercase letters | 12a34b56 |
@@ -78,6 +88,7 @@ The system supports the following lottery code formats:
 | `12_digit_alphanumeric` | 12-digit numbers + letters | 12a34B56c78D |
 
 ## API Usage Examples
+
 Please refer to the API documentation. OpenAPI protocol is provided, and you can import `openapi.json` into Swagger UI or other API tools for testing.
 
 ### Admin Login
@@ -158,7 +169,7 @@ curl -X POST http://localhost:3000/api/webhook/activities/WEBHOOK_ID/lottery-cod
 
 ## Directory Structure
 
-```
+```text
 apps/service/
 ├── src/
 │   ├── app.ts                 # 应用入口（启动即跑迁移）
@@ -241,6 +252,7 @@ Conventions: migration files are `<timestamp>-<PascalName>.ts` (up/down execute 
 3. Update API documentation
 
 ## Troubleshooting
+
 ### View Logs
 
 ```bash
