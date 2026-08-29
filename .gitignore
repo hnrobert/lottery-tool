@@ -51,8 +51,6 @@ out
 
 # Editor / OS
 .idea
-.vscode/*
-!.vscode/extensions.json
 .DS_Store
 *.suo
 *.ntvs*
