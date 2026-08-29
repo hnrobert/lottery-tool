@@ -44,8 +44,7 @@ export function createRecord(
 export async function updateSignature(
   recordId: number,
   signatureData: {
-    signature_key: string;
-    signature_url: string;
+    signature_data: string;
     signed_at?: Date;
   },
   manager?: EntityManager,
@@ -56,12 +55,19 @@ export async function updateSignature(
     return null;
   }
 
-  record.signature_key = signatureData.signature_key;
-  record.signature_url = signatureData.signature_url;
+  record.signature_data = signatureData.signature_data;
   record.signed_at = signatureData.signed_at || new Date();
   record.signature_status = 'signed';
 
   return repo.save(record);
+}
+
+// 列表场景剥离大字段：签字 data URL 只通过专用取图接口返回
+export function stripSignatureData(records: LotteryRecord[]): LotteryRecord[] {
+  for (const r of records) {
+    delete r.signature_data;
+  }
+  return records;
 }
 
 export const findById = (id: number, manager?: EntityManager): Promise<LotteryRecord | null> =>
@@ -144,7 +150,7 @@ export async function findByActivity(
   const [rows, count] = await qb.getManyAndCount();
 
   return {
-    records: rows,
+    records: stripSignatureData(rows),
     pagination: {
       total: count,
       page: parseInt(String(page)),
@@ -178,7 +184,7 @@ export async function findByOperator(
   const [rows, count] = await qb.getManyAndCount();
 
   return {
-    records: rows,
+    records: stripSignatureData(rows),
     pagination: {
       total: count,
       page: parseInt(String(page)),

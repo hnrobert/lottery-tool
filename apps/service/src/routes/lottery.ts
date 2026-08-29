@@ -12,8 +12,6 @@ import * as LotteryCodeService from '../services/lottery-code.service';
 import * as PrizeService from '../services/prize.service';
 import * as LotteryRecordService from '../services/lottery-record.service';
 import { OPERATION_TYPES } from '../services/operation-log.service';
-import * as cosClient from '../utils/cosClient';
-import { isCosConfigured, getCosConfig } from '../utils/systemConfig';
 
 const router = express.Router();
 
@@ -354,7 +352,7 @@ async (req: Request, res: Response, next: NextFunction) => {
 
 /**
  * @route   POST /api/lottery/activities/:id/records/:recordId/signature
- * @desc    上传签字图片到COS并更新记录
+ * @desc    上传签字图片（PNG data URL 直接存库）
  * @access  Private (Admin)
  */
 router.post('/activities/:id/records/:recordId/signature', [
@@ -372,11 +370,6 @@ async (req: Request, res: Response, next: NextFunction) => {
     const activityId = parseInt(req.params.id);
     const recordId = parseInt(req.params.recordId);
     const { image } = req.body;
-
-    // 检查COS是否配置
-    if (!isCosConfigured()) {
-      throw createError('BUSINESS_COS_NOT_CONFIGURED', '系统未配置COS，无法上传签字');
-    }
 
     // 查找活动
     const activity = await ActivityService.findById(activityId);
@@ -410,30 +403,21 @@ async (req: Request, res: Response, next: NextFunction) => {
       throw createError('BUSINESS_SIGNATURE_EXISTS', '该记录已签字，不可重复签字');
     }
 
-    // 解析base64图片
-    const base64Data = image.replace(/^data:image\/png;base64,/, '');
-    const imageBuffer = Buffer.from(base64Data, 'base64');
+    // 规范为完整 data URL（前端可能传裸 base64 或 data URL）
+    const dataUrl = image.startsWith('data:')
+      ? image
+      : `data:image/png;base64,${image.replace(/^data:image\/png;base64,/, '')}`;
 
-    // 限制大小（2MB）
+    // 限制大小（解码后 2MB）
     const MAX_SIZE = 2 * 1024 * 1024;
-    if (imageBuffer.length > MAX_SIZE) {
+    const base64Payload = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    if (Buffer.from(base64Payload, 'base64').length > MAX_SIZE) {
       throw createError('VALIDATION_FILE_TOO_LARGE', '签字图片大小不能超过2MB');
     }
 
-    // 构建COS对象键
-    const cosConfig = getCosConfig()!;
-    const objectKey = cosClient.buildObjectKey(activityId, recordId, cosConfig.path_prefix);
-
-    // 上传到COS
-    await cosClient.putObject(objectKey, imageBuffer, 'image/png');
-
-    // 构建访问URL
-    const signatureUrl = cosClient.buildPublicUrl(objectKey);
-
-    // 更新记录
+    // 直接存库（signed_at/signature_status 由服务层维护）
     await LotteryRecordService.updateSignature(recordId, {
-      signature_key: objectKey,
-      signature_url: signatureUrl as string,
+      signature_data: dataUrl,
       signed_at: new Date(),
     });
 
@@ -441,11 +425,54 @@ async (req: Request, res: Response, next: NextFunction) => {
       success: true,
       data: {
         record_id: recordId,
-        signature_key: objectKey,
-        signature_url: signatureUrl,
+        signature_data: dataUrl,
         signed_at: new Date().toISOString(),
       },
       message: '签字上传成功',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/lottery/activities/:id/records/:recordId/signature
+ * @desc    获取签字图片（data URL；列表接口不返回此大字段）
+ * @access  Private (Admin)
+ */
+router.get('/activities/:id/records/:recordId/signature', [
+  authenticateToken,
+  requireAdmin,
+], async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const activityId = parseInt(req.params.id);
+    const recordId = parseInt(req.params.recordId);
+
+    const activity = await ActivityService.findById(activityId);
+    if (!activity) {
+      throw createError('BUSINESS_ACTIVITY_NOT_FOUND');
+    }
+
+    if ((req as any).user.role !== 'super_admin' && activity.created_by !== (req as any).user.id) {
+      throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动');
+    }
+
+    const record = await LotteryRecordService.findById(recordId);
+    if (!record) {
+      throw createError('BUSINESS_LOTTERY_RECORD_NOT_FOUND', '抽奖记录不存在');
+    }
+    if (record.activity_id !== activityId) {
+      throw createError('VALIDATION_INVALID_FORMAT', '该记录不属于此活动');
+    }
+
+    res.json({
+      success: true,
+      data: {
+        record_id: recordId,
+        signature_status: record.signature_status,
+        signature_data: record.signature_data,
+        signed_at: record.signed_at,
+      },
     });
   } catch (error) {
     next(error);
