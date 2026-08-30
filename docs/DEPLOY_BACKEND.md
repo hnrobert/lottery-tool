@@ -4,7 +4,7 @@
 
 - 镜像地址：`ghcr.io/comppsyunion/lottery-tool-service`（**public**，无需登录即可拉取）
 - 触发构建：push 到 main 分支且改动涉及后端（`apps/service/**`、依赖清单、Dockerfile 等）
-- 标签约定：`latest`（默认分支最新）与 `main-<短sha>`（对应触发提交，可精确锁定/回滚）
+- 标签约定：主分支 `latest`（最新）与 `main-<短sha>`；其他分支 `develop` 与 `develop-<短sha>`（均可精确锁定/回滚）
 
 ## 一、最快部署（Compose 一键起）
 
