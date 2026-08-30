@@ -25,6 +25,7 @@ import type {
   Pagination,
   DrawLotteryResponse,
   RegistrationStatus,
+  MailConfig,
   UploadSignatureRequest,
   UploadSignatureResponse,
 } from './types/api'
@@ -177,6 +178,21 @@ export const authApi = {
     return apiFetch('/auth/registration-status', {}, false)
   },
 
+  // 发送注册邮箱验证码（公开）
+  async sendCode(data: {
+    email: string
+    session: string
+  }): Promise<{ sent: boolean; ttl_minutes: number }> {
+    return apiFetch(
+      '/auth/send-code',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      false,
+    )
+  },
+
   // 获取当前用户信息
   async me(): Promise<{ user: User }> {
     return apiFetch('/auth/me')
@@ -266,6 +282,27 @@ export const systemApi = {
     return apiFetch('/system/registration', {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
+    })
+  },
+
+  // 邮件通道配置（仅超级管理员）
+  async getMail(): Promise<{ config: MailConfig | null }> {
+    return apiFetch('/system/mail')
+  },
+
+  async setMail(
+    data: Partial<MailConfig> & { postAuthToken?: string },
+  ): Promise<{ config: MailConfig }> {
+    return apiFetch('/system/mail', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async sendTestMail(to: string): Promise<void> {
+    return apiFetch('/system/mail/test', {
+      method: 'POST',
+      body: JSON.stringify({ to }),
     })
   },
 }

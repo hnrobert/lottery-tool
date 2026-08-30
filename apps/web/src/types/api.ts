@@ -108,6 +108,16 @@ export interface LoginRequest {
   password: string
 }
 
+export interface MailConfig {
+  postUrl: string
+  postFieldMap: string
+  postPreset: 'none' | 'smtogo' | 'generic' | 'custom_example'
+  fromAddress: string
+  codeTtlMinutes: number
+  codeSubject: string
+  hasToken: boolean
+}
+
 export interface RegistrationStatus {
   registration_enabled: boolean
   initialized: boolean

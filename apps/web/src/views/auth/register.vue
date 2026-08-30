@@ -12,7 +12,13 @@ import { toast } from 'vue-sonner'
 
 const router = useRouter()
 
-const handleRegister = async (values: { username: string; email: string; password: string }) => {
+const handleRegister = async (values: {
+  username: string
+  email: string
+  password: string
+  code?: string
+  session?: string
+}) => {
   try {
     const res = await API.auth.register(values)
     // 后端语义：首位注册者自动成为超级管理员，之后按系统注册开关放行为普通管理员

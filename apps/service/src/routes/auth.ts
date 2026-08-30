@@ -9,6 +9,8 @@ import { User } from '../entities/user.entity'
 import * as UserService from '../services/user.service'
 import { OPERATION_TYPES } from '../services/operation-log.service'
 import { isRegistrationEnabled } from '../services/system-setting.service'
+import { getMailConfig, sendMail } from '../services/mail.service'
+import { issueCode, consumeCode, checkCodeSendLimit } from '../services/email-code.service'
 
 const router = express.Router()
 
@@ -105,6 +107,67 @@ router.get('/registration-status', async (req: Request, res: Response, next: Nex
 })
 
 /**
+ * @route   POST /api/auth/send-code
+ * @desc    发送注册邮箱验证码（已注册邮箱静默返回 OK，防枚举）
+ * @access  Public
+ */
+router.post(
+  '/send-code',
+  [
+    body('email').isEmail().withMessage('邮箱格式不正确'),
+    body('session')
+      .isString()
+      .isLength({ min: 8, max: 64 })
+      .withMessage('session 必须为 8-64 位字符串'),
+  ],
+  validateRequest,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email, session } = req.body
+      const normalized = String(email).trim().toLowerCase()
+
+      // 已注册邮箱静默 OK：不暴露账号存在性，也不给存量用户发码
+      const existing = await AppDataSource.getRepository(User).findOneBy({ email: normalized })
+      if (existing) {
+        return res.json({ success: true, data: { sent: true }, message: '验证码已发送' })
+      }
+
+      const mailConfig = await getMailConfig()
+      if (!mailConfig?.postUrl) {
+        throw createError('SYSTEM_MAIL_NOT_CONFIGURED', '系统未配置邮件通道，无法发送验证码')
+      }
+
+      const limit = await checkCodeSendLimit(normalized)
+      if (!limit.allowed) {
+        throw createError('AUTH_TOO_MANY_REQUESTS', limit.message)
+      }
+
+      const code = String(Math.floor(100000 + Math.random() * 900000))
+      issueCode(normalized, session, code, mailConfig.codeTtlMinutes)
+
+      const html =
+        '<p style="font-size:15px;line-height:1.6;">您正在注册抽奖系统账户，验证码为：</p>' +
+        `<p style="font-size:36px;font-weight:700;letter-spacing:10px;margin:16px 0;">${code}</p>` +
+        `<p style="font-size:13px;color:#737373;">验证码 ${mailConfig.codeTtlMinutes} 分钟内有效。如非本人操作，请忽略本邮件。</p>`
+      await sendMail(mailConfig, {
+        to: normalized,
+        subject: mailConfig.codeSubject,
+        body: html,
+        html: true,
+      })
+
+      res.json({
+        success: true,
+        data: { sent: true, ttl_minutes: mailConfig.codeTtlMinutes },
+        message: '验证码已发送',
+      })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+/**
  * @route   POST /api/auth/register
  * @desc    注册账户。系统尚无用户时（首次注册）自动成为超级管理员；
  *          之后持超管令牌可创建指定角色，否则按系统注册开关放行为普通管理员。
@@ -136,12 +199,19 @@ router.post(
       .optional()
       .isIn(['admin', 'super_admin'])
       .withMessage('角色只能是admin或super_admin'),
+
+    body('code').optional().isString().isLength({ min: 6, max: 6 }).withMessage('验证码为6位'),
+    body('session')
+      .optional()
+      .isString()
+      .isLength({ min: 8, max: 64 })
+      .withMessage('session 必须为 8-64 位字符串'),
   ],
   validateRequest,
   logAuthOperation(OPERATION_TYPES.USER_REGISTER),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { username, email, password, role } = req.body
+      const { username, email, password, role, code, session } = req.body
 
       // 事务 + advisory lock：防止两个并发"首位注册"都看到空表而双双成为超管
       const { newUser, isFirstUser } = await AppDataSource.transaction(async (manager) => {
@@ -150,10 +220,9 @@ router.post(
         const userCount = await manager.getRepository(User).count()
 
         if (userCount > 0) {
-          // 非首次注册：持超管令牌可创建任意角色账户；
-          // 否则取决于系统注册开关（开启则放行为普通管理员，默认开启）
           const operator = (req as any).user
           if (operator) {
+            // 持超管令牌可创建任意角色账户（已有信任，免验码）
             if (operator.role !== 'super_admin') {
               throw createError(
                 'AUTH_INSUFFICIENT_PERMISSION',
@@ -161,8 +230,15 @@ router.post(
               )
             }
           } else {
+            // 公开注册：开关 + 邮箱验证码双重校验
             if (!(await isRegistrationEnabled())) {
               throw createError('AUTH_REGISTRATION_DISABLED')
+            }
+            if (!code) {
+              throw createError('AUTH_CODE_REQUIRED', '注册需要邮箱验证码')
+            }
+            if (!consumeCode(String(email).trim().toLowerCase(), session, code)) {
+              throw createError('AUTH_CODE_INVALID')
             }
           }
         }

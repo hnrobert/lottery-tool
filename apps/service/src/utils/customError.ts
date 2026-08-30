@@ -35,6 +35,10 @@ export const ErrorTypes: Record<string, ErrorTypeDef> = {
   AUTH_INSUFFICIENT_PERMISSION: { code: 'AUTH_003', message: '权限不足', statusCode: 403 },
   AUTH_ACCOUNT_DISABLED: { code: 'AUTH_004', message: '账户已被禁用', statusCode: 403 },
   AUTH_REGISTRATION_DISABLED: { code: 'AUTH_005', message: '系统已关闭注册', statusCode: 403 },
+  AUTH_CODE_REQUIRED: { code: 'AUTH_006', message: '需要邮箱验证码', statusCode: 400 },
+  AUTH_CODE_INVALID: { code: 'AUTH_007', message: '验证码无效或已过期', statusCode: 400 },
+  AUTH_TOO_MANY_REQUESTS: { code: 'AUTH_008', message: '请求过于频繁', statusCode: 429 },
+  SYSTEM_MAIL_NOT_CONFIGURED: { code: 'SYSTEM_010', message: '邮件通道未配置', statusCode: 400 },
 
   // 验证相关错误
   VALIDATION_MISSING_PARAMS: { code: 'VALIDATION_001', message: '请求参数缺失', statusCode: 400 },

@@ -5,12 +5,20 @@ import bcrypt from 'bcryptjs'
 import moment from 'moment'
 import { authenticateToken, requireAdmin, requireSuperAdmin } from '../middleware/auth'
 import { AppDataSource } from '../utils/database'
+import { createError } from '../utils/customError'
 import { User } from '../entities/user.entity'
 import { Activity } from '../entities/activity.entity'
 import { LotteryRecord } from '../entities/lottery-record.entity'
 import { OperationLog } from '../entities/operation-log.entity'
 import * as OperationLogService from '../services/operation-log.service'
 import { isRegistrationEnabled, setRegistrationEnabled } from '../services/system-setting.service'
+import {
+  getMailConfig,
+  saveMailConfig,
+  mailConfigToClient,
+  sendTestMail,
+} from '../services/mail.service'
+import { checkTestSendLimit } from '../services/email-code.service'
 import * as UserService from '../services/user.service'
 
 const router = express.Router()
@@ -623,6 +631,110 @@ router.put(
         data: { registration_enabled: enabled },
         message: enabled ? '系统注册已开启' : '系统注册已关闭',
       })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+// ==================== 邮件通道配置（仅超级管理员，POST webhook 形式） ====================
+
+// 获取邮件配置（token 脱敏）
+router.get(
+  '/mail',
+  [authenticateToken, requireSuperAdmin],
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const config = await getMailConfig()
+      res.json({ success: true, data: { config: mailConfigToClient(config) } })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+// 保存邮件配置（authToken 留空不覆盖）
+router.put(
+  '/mail',
+  [
+    authenticateToken,
+    requireSuperAdmin,
+
+    body('postUrl')
+      .optional({ values: 'falsy' })
+      .isURL({ require_tld: false })
+      .withMessage('webhook 地址格式不正确'),
+    body('postPreset')
+      .optional()
+      .isIn(['none', 'smtogo', 'generic', 'custom_example'])
+      .withMessage('预设名不合法'),
+    body('postFieldMap')
+      .optional({ values: 'falsy' })
+      .isString()
+      .withMessage('字段映射必须是 JSON 字符串'),
+    body('fromAddress').optional({ values: 'falsy' }).isEmail().withMessage('发件人地址格式不正确'),
+    body('codeTtlMinutes')
+      .optional()
+      .isInt({ min: 1, max: 60 })
+      .withMessage('验证码有效期须为 1-60 分钟'),
+    body('codeSubject').optional().isString().isLength({ max: 100 }).withMessage('邮件主题过长'),
+    body('postAuthToken').optional({ values: 'falsy' }).isString().withMessage('令牌必须是字符串'),
+  ],
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res
+        .status(400)
+        .json({ success: false, message: '参数验证失败', errors: errors.array() })
+    }
+    next()
+  },
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const config = await saveMailConfig(req.body)
+      await OperationLogService.log({
+        user_id: (req as any).user.id,
+        operation_type: 'UPDATE_MAIL_CONFIG',
+        operation_detail: '更新邮件通道配置',
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent') || null,
+      })
+      res.json({
+        success: true,
+        data: { config: mailConfigToClient(config) },
+        message: '邮件配置已保存',
+      })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+// 发送测试邮件（限频：同操作员 1/分钟）
+router.post(
+  '/mail/test',
+  [authenticateToken, requireSuperAdmin, body('to').isEmail().withMessage('收件地址格式不正确')],
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res
+        .status(400)
+        .json({ success: false, message: '参数验证失败', errors: errors.array() })
+    }
+    next()
+  },
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const config = await getMailConfig()
+      if (!config?.postUrl) {
+        return next(createError('SYSTEM_MAIL_NOT_CONFIGURED', '请先配置 webhook 地址'))
+      }
+      const limit = await checkTestSendLimit(`user-${(req as any).user.id}`)
+      if (!limit.allowed) {
+        return next(createError('AUTH_TOO_MANY_REQUESTS', limit.message))
+      }
+      const messageId = await sendTestMail(config, req.body.to)
+      res.json({ success: true, data: { message_id: messageId }, message: '测试邮件已发送' })
     } catch (error) {
       next(error)
     }
