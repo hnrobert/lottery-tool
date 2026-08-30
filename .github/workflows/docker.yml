@@ -6,8 +6,6 @@ name: Build and publish Docker image
 
 on:
   push:
-    branches:
-      - "*"
     paths:
       - "apps/service/**"
       - "package.json"
