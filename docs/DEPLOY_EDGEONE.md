@@ -70,12 +70,26 @@ VITE_APP_TITLE=抽奖工具
 
 在项目 **域名管理** 中添加自己的域名，按提示添加 CNAME 解析即可。EdgeOne 会自动签发 HTTPS 证书。
 
-## SPA 路由回退
+## SPA 路由回退（必配）
 
-前端使用 vue-router 的 **history 模式**（`createWebHistory`），直接访问/刷新 `/activities` 等子路径可能返回 404：
+前端使用 vue-router 的 **history 模式**（`createWebHistory`），直接访问/刷新 `/activities` 等子路径时，静态托管找不到对应文件会返回平台 404。仓库根目录的 [`edgeone.json`](../edgeone.json) 已配置回退：
 
-- EdgeOne Pages 识别到 SPA 项目时通常会自动回退到 `index.html`
-- 若仍出现 404：在 EdgeOne 控制台为站点添加**重写规则**——将 `/*` 重写到 `/index.html`（保留静态资源直出）
+```json
+{
+  "rewrites": [{ "source": "/*", "destination": "/index.html" }]
+}
+```
+
+该规则会被 EdgeOne Pages 识别为 SPA fallback：请求先匹配静态资源与函数，未命中时返回 `index.html`，浏览器 URL 保持不变、由前端路由处理。
+
+验证（应返回 200 与 `text/html`）：
+
+```bash
+curl -i https://<你的域名>/activities | head -3
+```
+
+> - `edgeone.json` 只声明 `rewrites`，未指定的构建配置沿用控制台设置；若 EdgeOne 项目的「根目录」设为 `apps/web`，则此文件需相应放在 `apps/web/` 下
+> - 切勿在 SPA 产物根目录放置 `404.html`（会破坏客户端路由）
 
 ## 后端配套配置
 
