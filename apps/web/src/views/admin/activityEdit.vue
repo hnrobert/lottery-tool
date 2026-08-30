@@ -150,7 +150,7 @@
               <div class="space-y-0.5">
                 <FormLabel class="text-base">开启签字确认</FormLabel>
                 <FormDescription>
-                  线下抽奖完成后，弹出签字板要求参与者签字确认。需先在超级管理员设置中配置 COS。
+                  线下抽奖完成后，弹出签字板要求参与者签字确认，签字图片直接保存在数据库中。
                 </FormDescription>
               </div>
               <FormControl>

@@ -249,7 +249,7 @@ export interface DrawLotteryResponse {
   lottery_code: LotteryCode
 }
 
-// COS 配置类型
+// 签字上传（PNG data URL）
 export interface UploadSignatureRequest {
   image: string
 }
