@@ -10,6 +10,7 @@ import * as UserService from '../services/user.service'
 import { OPERATION_TYPES } from '../services/operation-log.service'
 import { isRegistrationEnabled } from '../services/system-setting.service'
 import { getMailConfig, sendMail } from '../services/mail.service'
+import { renderCodeMail } from '../services/mail-theme'
 import { issueCode, consumeCode, checkCodeSendLimit } from '../services/email-code.service'
 
 const router = express.Router()
@@ -145,10 +146,8 @@ router.post(
       const code = String(Math.floor(100000 + Math.random() * 900000))
       issueCode(normalized, session, code, mailConfig.codeTtlMinutes)
 
-      const html =
-        '<p style="font-size:15px;line-height:1.6;">您正在注册抽奖系统账户，验证码为：</p>' +
-        `<p style="font-size:36px;font-weight:700;letter-spacing:10px;margin:16px 0;">${code}</p>` +
-        `<p style="font-size:13px;color:#737373;">验证码 ${mailConfig.codeTtlMinutes} 分钟内有效。如非本人操作，请忽略本邮件。</p>`
+      // email-poster 内置 code 模板（贴合站点主题，明暗自适应）
+      const html = await renderCodeMail(code, mailConfig.codeTtlMinutes)
       await sendMail(mailConfig, {
         to: normalized,
         subject: mailConfig.codeSubject,

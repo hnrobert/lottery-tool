@@ -1,5 +1,6 @@
 import { AppDataSource } from '../utils/database'
 import { SystemSetting } from '../entities/system-setting.entity'
+import { renderTestMail } from './mail-theme'
 
 const MAIL_CONFIG_KEY = 'mail_config'
 
@@ -130,12 +131,12 @@ export async function sendMail(c: MailConfig, input: SendMailInput): Promise<str
   }
 }
 
-/** 发送测试邮件（超管在设置页验证通道连通性） */
+/** 发送测试邮件（超管在设置页验证通道连通性；内置 card 模板，贴合站点主题） */
 export async function sendTestMail(c: MailConfig, to: string): Promise<string> {
   return sendMail(c, {
     to,
-    subject: '抽奖系统测试邮件',
-    body: '<p>这是一封测试邮件。如果您收到了它，说明邮件通道配置正确。</p>',
+    subject: 'Lottery Tool 邮件通道测试',
+    body: await renderTestMail(),
     html: true,
   })
 }
