@@ -29,6 +29,12 @@ export default tseslint.config(
       // 与项目既有风格/历史代码兼容，避免存量海量报错；新代码仍受核心规则约束
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      // 核心质量规则为 error（阻断提交）
+      'no-debugger': 'error',
+      'no-var': 'error',
+      'prefer-const': 'error',
+      eqeqeq: ['error', 'smart'],
+      'no-throw-literal': 'error',
       'vue/multi-word-component-names': 'off',
       'vue/max-attributes-per-line': 'off',
       'vue/singleline-html-element-content-newline': 'off',

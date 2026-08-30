@@ -133,16 +133,24 @@
             <h3 class="text-lg font-semibold text-gray-900 mb-4">友情链接</h3>
             <ul class="space-y-2">
               <li>
-                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors">合作伙伴A</a>
+                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors"
+                  >合作伙伴A</a
+                >
               </li>
               <li>
-                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors">合作伙伴B</a>
+                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors"
+                  >合作伙伴B</a
+                >
               </li>
               <li>
-                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors">合作伙伴C</a>
+                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors"
+                  >合作伙伴C</a
+                >
               </li>
               <li>
-                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors">合作伙伴D</a>
+                <a href="#" class="text-gray-600 hover:text-blue-600 transition-colors"
+                  >合作伙伴D</a
+                >
               </li>
             </ul>
           </div>
@@ -152,7 +160,9 @@
         <div class="border-t border-gray-200 pt-8 text-center">
           <p class="text-gray-500 text-sm">
             © 2025 不断同学创意网络科技工作室. MIT Licence. |
-            <a href="#" class="hover:text-blue-600 transition-colors">ICP备案号：京ICP备XXXXXXXX号</a>
+            <a href="#" class="hover:text-blue-600 transition-colors"
+              >ICP备案号：京ICP备XXXXXXXX号</a
+            >
           </p>
         </div>
       </div>

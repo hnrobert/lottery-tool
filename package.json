@@ -34,13 +34,13 @@
   },
   "lint-staged": {
     "apps/service/**/*.{ts,tsx}": [
-      "prettier --write",
-      "pnpm --filter @lottery-tool/service exec eslint --fix"
+      "prettier --check",
+      "pnpm --filter @lottery-tool/service exec eslint"
     ],
     "apps/web/**/*.{ts,vue}": [
-      "prettier --write",
-      "pnpm --filter @lottery-tool/web exec eslint --fix"
+      "prettier --check",
+      "pnpm --filter @lottery-tool/web exec eslint"
     ],
-    "*.{md,json,yaml,yml,css}": "prettier --write"
+    "*.{md,json,yaml,yml,css}": "prettier --check"
   }
 }
