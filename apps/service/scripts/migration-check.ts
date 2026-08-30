@@ -64,9 +64,7 @@ const main = (): void => {
   const barrel = readFileSync(resolve(migrationsDir, 'index.ts'), 'utf8')
   const unregistered = files.filter((f) => !barrel.includes(`./${f.replace(/\.ts$/, '')}`))
   if (unregistered.length) {
-    fail(
-      `Migration file(s) not registered in src/migrations/index.ts: ${unregistered.join(', ')}`,
-    )
+    fail(`Migration file(s) not registered in src/migrations/index.ts: ${unregistered.join(', ')}`)
   }
 }
 

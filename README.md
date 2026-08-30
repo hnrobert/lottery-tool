@@ -2,10 +2,10 @@
 
 抽奖工具 monorepo，使用 [pnpm workspace](https://pnpm.io/workspaces) 管理前端与后端。
 
-| 目录 | 说明 | 原仓库 |
-| --- | --- | --- |
-| `apps/web` | Vue 单页前端 | [Lottery-Tool-Frontend](https://github.com/buduan/Lottery-Tool-Frontend) |
-| `apps/service` | Express 后端 | [Lottery-Tool-Backend](https://github.com/buduan/Lottery-Tool-Backend) |
+| 目录           | 说明         | 原仓库                                                                   |
+| -------------- | ------------ | ------------------------------------------------------------------------ |
+| `apps/web`     | Vue 单页前端 | [Lottery-Tool-Frontend](https://github.com/buduan/Lottery-Tool-Frontend) |
+| `apps/service` | Express 后端 | [Lottery-Tool-Backend](https://github.com/buduan/Lottery-Tool-Backend)   |
 
 ## 环境
 

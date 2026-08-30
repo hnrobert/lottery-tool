@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+node_modules
+**/dist
+**/.dev
+**/coverage
+apps/web/src/components/ui
+pnpm-workspace.yaml
+docker-compose.yml

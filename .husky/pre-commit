@@ -1,0 +1,2 @@
+# 提交前自动格式化并修复 staged 文件（lint-staged 只处理暂存区，未暂存文件不受影响）
+npx lint-staged

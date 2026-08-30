@@ -79,13 +79,13 @@ pnpm test
 
 The system supports the following lottery code formats:
 
-| Format Code | Description | Example |
-| ------------- | ------------- | ---------- |
-| `4_digit_number` | 4-digit numbers only | 1234 |
-| `8_digit_number` | 8-digit numbers only | 12345678 |
-| `8_digit_alphanumeric` | 8-digit numbers + lowercase letters | 12a34b56 |
-| `12_digit_number` | 12-digit numbers only | 123456789012 |
-| `12_digit_alphanumeric` | 12-digit numbers + letters | 12a34B56c78D |
+| Format Code             | Description                         | Example      |
+| ----------------------- | ----------------------------------- | ------------ |
+| `4_digit_number`        | 4-digit numbers only                | 1234         |
+| `8_digit_number`        | 8-digit numbers only                | 12345678     |
+| `8_digit_alphanumeric`  | 8-digit numbers + lowercase letters | 12a34b56     |
+| `12_digit_number`       | 12-digit numbers only               | 123456789012 |
+| `12_digit_alphanumeric` | 12-digit numbers + letters          | 12a34B56c78D |
 
 ## API Usage Examples
 

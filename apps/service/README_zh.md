@@ -79,17 +79,17 @@ pnpm test
 
 系统支持以下抽奖码格式：
 
-| 格式代码 | 描述 | 示例 |
-| --------- | ------ | ------ |
-| `4_digit_number` | 4位纯数字 | 1234 |
-| `8_digit_number` | 8位纯数字 | 12345678 |
-| `8_digit_alphanumeric` | 8位数字+小写字母 | 12a34b56 |
-| `12_digit_number` | 12位纯数字 | 123456789012 |
-| `12_digit_alphanumeric` | 12位数字+字母 | 12a34B56c78D |
+| 格式代码                | 描述             | 示例         |
+| ----------------------- | ---------------- | ------------ |
+| `4_digit_number`        | 4位纯数字        | 1234         |
+| `8_digit_number`        | 8位纯数字        | 12345678     |
+| `8_digit_alphanumeric`  | 8位数字+小写字母 | 12a34b56     |
+| `12_digit_number`       | 12位纯数字       | 123456789012 |
+| `12_digit_alphanumeric` | 12位数字+字母    | 12a34B56c78D |
 
 ## API使用示例
 
-具体请参考API文档, 并已提供OpenAPI协议，你可以将``openapi.json`` 导入到Swagger UI更多其他API工具中进行测试。
+具体请参考API文档, 并已提供OpenAPI协议，你可以将`openapi.json` 导入到Swagger UI更多其他API工具中进行测试。
 
 ### 管理员登录
 
