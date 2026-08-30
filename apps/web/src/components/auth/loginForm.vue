@@ -3,7 +3,6 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const emits = defineEmits<{
   (e: 'submit', payload: { username: string; password: string }): void
@@ -28,18 +27,12 @@ const onSubmit = (e: Event) => {
           </h1>
           <div class="text-center text-sm">
             Don't have an account?
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <button type="button" class="underline underline-offset-4">
-                    Sign up
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Registration not supported yet</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <RouterLink
+              :to="{ name: 'Register' }"
+              class="underline underline-offset-4"
+            >
+              Sign up
+            </RouterLink>
           </div>
         </div>
         <div class="flex flex-col gap-6">

@@ -158,12 +158,12 @@ export const authApi = {
     }, false);
   },
 
-  // 创建新管理员账户
+  // 注册（公开接口：首位注册者成为超级管理员，此后需超管令牌）
   async register(data: RegisterRequest): Promise<{ user: User }> {
     return apiFetch('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
+    }, false);
   },
 
   // 获取当前用户信息

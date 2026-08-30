@@ -107,7 +107,7 @@ export interface RegisterRequest {
   username: string;
   email: string;
   password: string;
-  role: 'admin' | 'super_admin';
+  role?: 'admin' | 'super_admin';
 }
 
 export interface ChangePasswordRequest {
