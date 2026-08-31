@@ -95,11 +95,15 @@ export interface ApiResponse<T = unknown> {
 
 export interface ErrorResponse {
   success: false
-  error: {
+  /** 统一错误格式（errorHandler）：error.code/message/details */
+  error?: {
     code: string
     message: string
     details?: string
   }
+  /** 部分路由校验分支的旧格式：顶层 message + errors 数组 */
+  message?: string
+  errors?: { msg?: string; message?: string }[]
 }
 
 // 请求参数类型

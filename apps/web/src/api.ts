@@ -105,9 +105,15 @@ async function apiFetch<T>(
         )
       }
 
+      // 兼容两种后端错误格式：统一格式 error.message；
+      // 旧校验格式顶层 message（笼统）+ errors 数组（具体说明，优先取首条）
+      const firstFieldError = errorData.errors?.[0]?.msg || errorData.errors?.[0]?.message
       throw new ApiError(
         errorData.error?.code || 'UNKNOWN_ERROR',
-        errorData.error?.message || 'Unknown error occurred',
+        errorData.error?.message ||
+          firstFieldError ||
+          errorData.message ||
+          'Unknown error occurred',
         errorData.error?.details,
         response.status,
       )

@@ -114,7 +114,7 @@
           {{ mailMessage }}
         </p>
 
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <Button type="button" :disabled="savingMail" @click="saveMailConfig">
             保存邮件配置
           </Button>
@@ -126,18 +126,14 @@
           >
             {{ testing ? '发送中...' : '发送测试邮件' }}
           </Button>
-          <div v-if="testing" class="flex items-center gap-2">
-            <Input
-              v-model="testTo"
-              type="email"
-              placeholder="收件地址"
-              class="w-48"
-              @keyup.enter="sendTest"
-            />
-          </div>
-        </div>
-        <div v-if="!testing && !testTo" class="flex items-center gap-2">
-          <Input v-model="testTo" type="email" placeholder="测试收件地址" class="w-64" />
+          <Input
+            v-model="testTo"
+            type="email"
+            placeholder="测试收件地址"
+            class="w-64"
+            :disabled="testing"
+            @keyup.enter="sendTest"
+          />
         </div>
       </div>
     </div>
