@@ -5,12 +5,12 @@ import {
   logActivityOperation,
   logLotteryCodeOperation,
   logPrizeOperation,
-} from '../../middleware/operationLogger'
-import { createError } from '../../utils/customError'
+} from '../../middleware/operation-logger'
+import { createError } from '../../utils/custom-error'
 import {
   generateBatchLotteryCodes,
   validateLotteryCodeFormat,
-} from '../../utils/lotteryCodeGenerator'
+} from '../../utils/lottery-code-generator'
 import { AppDataSource } from '../../utils/database'
 import { Activity } from '../../entities/activity.entity'
 import { LotteryCode } from '../../entities/lottery-code.entity'

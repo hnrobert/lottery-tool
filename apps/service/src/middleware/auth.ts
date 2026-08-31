@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { Request, Response, NextFunction } from 'express'
-import { createError } from '../utils/customError'
+import { createError } from '../utils/custom-error'
 import * as UserService from '../services/user.service'
 import * as ActivityService from '../services/activity.service'
 

@@ -10,7 +10,7 @@ router.use(requireAdmin)
 // 子路由
 router.use('/activities', require('./admin/activities').default)
 router.use('/prizes', require('./admin/prizes').default)
-router.use('/lottery-codes', require('./admin/lotteryCode').default)
-router.use('/lottery-records', require('./admin/lotteryRecord').default)
+router.use('/lottery-codes', require('./admin/lottery-code').default)
+router.use('/lottery-records', require('./admin/lottery-record').default)
 
 export default router

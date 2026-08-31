@@ -1,7 +1,7 @@
 // dist 为编译产物（无 .d.ts），保持 require 以获得宽松类型
-const lotteryCodeGenerator = require('../../dist/utils/lotteryCodeGenerator')
+const lotteryCodeGenerator = require('../../dist/utils/lottery-code-generator')
 
-describe('抽奖码生成器单元测试', () => {
+describe('抽奖码生成器测试', () => {
   describe('generateLotteryCode', () => {
     it('应该生成4位数字抽奖码', () => {
       const code = lotteryCodeGenerator.generateLotteryCode('4_digit_number')
@@ -198,6 +198,29 @@ describe('抽奖码生成器单元测试', () => {
 
     it('应该处理无效格式', () => {
       expect(lotteryCodeGenerator.getFormatDescription('invalid_format')).toBe('未知格式')
+    })
+  })
+
+  describe('generateBatchLotteryCodes with retry', () => {
+    it('应该生成指定数量的抽奖码（带重试机制）', () => {
+      const codes = lotteryCodeGenerator.generateBatchLotteryCodes('8_digit_number', 10)
+
+      expect(codes).toHaveLength(10)
+      codes.forEach((code: string) => {
+        expect(code).toMatch(/^\d{8}$/)
+      })
+
+      // 验证唯一性
+      const uniqueCodes = new Set(codes)
+      expect(uniqueCodes.size).toBe(10)
+    })
+
+    it('应该处理大量代码生成', () => {
+      // 测试生成大量代码
+      const codes = lotteryCodeGenerator.generateBatchLotteryCodes('4_digit_number', 50)
+
+      expect(codes.length).toBe(50)
+      expect(codes.length).toBeGreaterThan(0)
     })
   })
 

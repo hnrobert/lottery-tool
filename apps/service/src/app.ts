@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
 import { initDataSource } from './utils/database'
 import { seedSuperAdminFromEnv } from './services/user.service'
-import errorHandler from './middleware/errorHandler'
+import errorHandler from './middleware/error-handler'
 
 dotenv.config()
 
@@ -73,7 +73,7 @@ export const createApp = async (): Promise<void> => {
   app.use('/auth', require('./routes/auth').default)
   app.use('/admin', require('./routes/admin').default)
   app.use('/lottery', require('./routes/lottery').default)
-  app.use('/lottery-codes', require('./routes/lotteryCode').default)
+  app.use('/lottery-codes', require('./routes/lottery-code').default)
   app.use('/webhook', require('./routes/webhook').default)
   app.use('/system', require('./routes/system').default)
   app.use('/dashboard', require('./routes/dashboard').default)
