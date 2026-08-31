@@ -4,7 +4,18 @@ export default tseslint.config(
   {
     ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'scripts/dist/**', '.dev/**'],
   },
-  ...tseslint.configs.recommended,
+  ...tseslint.configs.recommended.map((c) => ({
+    ...c,
+    languageOptions: {
+      ...c.languageOptions,
+      // 显式声明 tsconfig 根：IDE 从 monorepo 根运行时会推断出
+      // service/web 两个候选而报错（CLI 各包目录内运行不受影响）
+      parserOptions: {
+        ...c.languageOptions?.parserOptions,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  })),
   {
     rules: {
       // 存量代码宽松起步：显式 any 是既有风格（严格模式未开），留警告不阻断

@@ -13,6 +13,15 @@ export default tseslint.config(
   ...tseslint.configs.recommended.map((c) => ({
     ...c,
     files: ['**/*.{ts,vue}'],
+    languageOptions: {
+      ...c.languageOptions,
+      // 显式声明 tsconfig 根：IDE 从 monorepo 根运行时会推断出
+      // service/web 两个候选而报错（CLI 各包目录内运行不受影响）
+      parserOptions: {
+        ...c.languageOptions?.parserOptions,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
   })),
   ...vue.configs['flat/recommended'].map((c) => ({
     ...c,
@@ -21,7 +30,10 @@ export default tseslint.config(
   {
     files: ['**/*.vue'],
     languageOptions: {
-      parserOptions: { parser: tseslint.parser },
+      parserOptions: {
+        parser: tseslint.parser,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   },
   {
