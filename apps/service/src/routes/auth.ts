@@ -10,7 +10,7 @@ import * as UserService from '../services/user.service'
 import { OPERATION_TYPES } from '../services/operation-log.service'
 import { isRegistrationEnabled } from '../services/system-setting.service'
 import { getMailConfig, sendMail } from '../services/mail.service'
-import { renderCodeMail } from '../services/mail-theme'
+import { renderCodeMail } from '../utils/mail-theme'
 import { issueCode, consumeCode, checkCodeSendLimit } from '../services/email-code.service'
 
 const router = express.Router()

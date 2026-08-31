@@ -1,6 +1,6 @@
 import { AppDataSource } from '../utils/database'
 import { SystemSetting } from '../entities/system-setting.entity'
-import { renderTestMail } from './mail-theme'
+import { renderTestMail } from '../utils/mail-theme'
 
 const MAIL_CONFIG_KEY = 'mail_config'
 
