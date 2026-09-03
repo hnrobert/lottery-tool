@@ -67,7 +67,7 @@
 
     <!-- 抽奖界面演示 Dialog -->
     <Dialog :open="showDemoDialog" @update:open="(v: boolean) => (showDemoDialog = v)">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent class="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>抽奖界面演示</DialogTitle>
           <DialogDescription>
@@ -85,12 +85,18 @@
           <div class="space-y-1.5">
             <div class="text-xs text-muted-foreground">测试抽奖码（活动固定一个，可反复使用）</div>
             <div class="flex items-center gap-2">
+              <!-- min-w-0 + break-all：flex 子项默认 min-width:auto 会撑破容器 -->
               <code
-                class="flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-lg font-bold tracking-widest"
+                class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 text-center font-mono text-lg font-bold tracking-widest break-all"
               >
                 {{ demoCode }}
               </code>
-              <Button variant="outline" size="sm" @click="copyText(demoCode, '抽奖码已复制')">
+              <Button
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                @click="copyText(demoCode, '抽奖码已复制')"
+              >
                 复制
               </Button>
             </div>
@@ -99,10 +105,17 @@
           <div class="space-y-1.5">
             <div class="text-xs text-muted-foreground">抽奖页链接（自动填入测试码）</div>
             <div class="flex items-center gap-2">
-              <code class="flex-1 truncate rounded-md border bg-muted px-3 py-2 font-mono text-xs">
+              <code
+                class="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 font-mono text-xs"
+              >
                 {{ demoUrl }}
               </code>
-              <Button variant="outline" size="sm" @click="copyText(demoUrl, '链接已复制')">
+              <Button
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                @click="copyText(demoUrl, '链接已复制')"
+              >
                 复制
               </Button>
             </div>
