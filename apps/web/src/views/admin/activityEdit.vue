@@ -7,7 +7,7 @@
       <div class="space-y-4">
         <h3 class="text-lg font-medium text-gray-900">基本信息</h3>
 
-        <FormField v-slot="{ componentField }" name="name">
+        <FormField v-slot="{ field: componentField }" name="name">
           <FormItem>
             <FormLabel>活动名称</FormLabel>
             <FormControl>
@@ -18,7 +18,7 @@
           </FormItem>
         </FormField>
 
-        <FormField v-slot="{ componentField }" name="description">
+        <FormField v-slot="{ field: componentField }" name="description">
           <FormItem>
             <FormLabel>活动描述</FormLabel>
             <FormControl>
@@ -33,7 +33,7 @@
           </FormItem>
         </FormField>
 
-        <FormField v-slot="{ componentField }" name="lottery_mode">
+        <FormField v-slot="{ field: componentField }" name="lottery_mode">
           <FormItem>
             <FormLabel>抽奖模式 *</FormLabel>
             <FormControl>
@@ -64,7 +64,7 @@
         <h3 class="text-lg font-medium text-gray-900">时间设置</h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField v-slot="{ componentField }" name="start_time">
+          <FormField v-slot="{ field: componentField }" name="start_time">
             <FormItem>
               <FormLabel>开始时间</FormLabel>
               <FormControl>
@@ -75,7 +75,7 @@
             </FormItem>
           </FormField>
 
-          <FormField v-slot="{ componentField }" name="end_time">
+          <FormField v-slot="{ field: componentField }" name="end_time">
             <FormItem>
               <FormLabel>结束时间</FormLabel>
               <FormControl>
@@ -92,7 +92,7 @@
       <div class="space-y-4">
         <h3 class="text-lg font-medium text-gray-900">抽奖设置</h3>
 
-        <FormField v-slot="{ componentField }" name="settings.max_lottery_codes">
+        <FormField v-slot="{ field: componentField }" name="settings.max_lottery_codes">
           <FormItem>
             <FormLabel>最大抽奖码数量</FormLabel>
             <FormControl>
@@ -108,7 +108,7 @@
           </FormItem>
         </FormField>
 
-        <FormField v-slot="{ componentField }" name="settings.lottery_code_format">
+        <FormField v-slot="{ field: componentField }" name="settings.lottery_code_format">
           <FormItem>
             <FormLabel>抽奖码格式</FormLabel>
             <FormControl>
@@ -145,7 +145,7 @@
 
         <!-- 签字设置（仅线下抽奖） -->
         <div v-if="form.values.lottery_mode === 'offline'" class="pt-4 border-t">
-          <FormField v-slot="{ componentField }" name="settings.require_signature">
+          <FormField v-slot="{ field: componentField }" name="settings.require_signature">
             <FormItem class="flex flex-row items-center justify-between rounded-lg border p-4">
               <div class="space-y-0.5">
                 <FormLabel class="text-base">开启签字确认</FormLabel>

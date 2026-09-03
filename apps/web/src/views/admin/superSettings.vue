@@ -61,7 +61,11 @@
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">
-          <div class="grid gap-2">
+          <!-- custom_example 预设无 from 字段（email/subject/content），隐藏发件人并让预设占满整行 -->
+          <div
+            class="grid gap-2"
+            :class="{ 'sm:col-span-2': mail.postPreset === 'custom_example' }"
+          >
             <Label html-for="mail-preset">字段映射预设</Label>
             <select
               id="mail-preset"
@@ -73,7 +77,7 @@
               <option value="generic">generic</option>
             </select>
           </div>
-          <div class="grid gap-2">
+          <div v-if="mail.postPreset !== 'custom_example'" class="grid gap-2">
             <Label html-for="mail-from">发件人地址（可选）</Label>
             <Input
               id="mail-from"
@@ -226,7 +230,14 @@ const sendTest = async () => {
   testing.value = true
   mailMessage.value = ''
   try {
-    await API.system.sendTestMail(testTo.value)
+    // 用表单当前值发送（无需先保存）；令牌留空时后端沿用库中值
+    await API.system.sendTestMail(testTo.value, {
+      postUrl: mail.value.postUrl,
+      postAuthToken: mail.value.postAuthToken,
+      postFieldMap: mail.value.postFieldMap,
+      postPreset: mail.value.postPreset,
+      fromAddress: mail.value.fromAddress,
+    })
     mailMessage.value = `测试邮件已发送至 ${testTo.value}，请查收`
     mailError.value = false
   } catch (err) {

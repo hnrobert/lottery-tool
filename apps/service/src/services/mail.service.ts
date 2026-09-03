@@ -22,7 +22,8 @@ export interface MailConfig {
   codeSubject: string
 }
 
-const DEFAULT_CONFIG: MailConfig = {
+/** 默认配置（测试发送在库中无配置时以此兜底） */
+export const DEFAULT_CONFIG: MailConfig = {
   postUrl: '',
   postAuthToken: '',
   postFieldMap: '',
@@ -44,15 +45,21 @@ export async function getMailConfig(): Promise<MailConfig | null> {
   }
 }
 
-/** token 留空不覆盖（与 gateway 密码语义一致：保存时无需重填密钥） */
-export async function saveMailConfig(patch: Partial<MailConfig>): Promise<MailConfig> {
-  const repo = AppDataSource.getRepository(SystemSetting)
-  const current = (await getMailConfig()) ?? { ...DEFAULT_CONFIG }
+/** 表单补丁合并：普通字段覆盖；token 留空不覆盖（与 gateway 密码语义一致，保存与测试发送共用） */
+export function mergeMailConfigPatch(current: MailConfig, patch: Partial<MailConfig>): MailConfig {
   const { postAuthToken, ...rest } = patch
   const merged: MailConfig = { ...current, ...rest }
   if (typeof postAuthToken === 'string' && postAuthToken !== '') {
     merged.postAuthToken = postAuthToken
   }
+  return merged
+}
+
+/** token 留空不覆盖（与 gateway 密码语义一致：保存时无需重填密钥） */
+export async function saveMailConfig(patch: Partial<MailConfig>): Promise<MailConfig> {
+  const repo = AppDataSource.getRepository(SystemSetting)
+  const current = (await getMailConfig()) ?? { ...DEFAULT_CONFIG }
+  const merged = mergeMailConfigPatch(current, patch)
   await repo.save({ key: MAIL_CONFIG_KEY, value: JSON.stringify(merged) })
   return merged
 }

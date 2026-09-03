@@ -13,9 +13,11 @@ import { OperationLog } from '../entities/operation-log.entity'
 import * as OperationLogService from '../services/operation-log.service'
 import { isRegistrationEnabled, setRegistrationEnabled } from '../services/system-setting.service'
 import {
+  DEFAULT_CONFIG,
   getMailConfig,
   saveMailConfig,
   mailConfigToClient,
+  mergeMailConfigPatch,
   sendTestMail,
 } from '../services/mail.service'
 import { checkTestSendLimit } from '../services/email-code.service'
@@ -710,10 +712,36 @@ router.put(
   },
 )
 
-// 发送测试邮件（限频：同操作员 1/分钟）
+// 发送测试邮件（限频：同操作员 1/分钟）。
+// body 可选携带 config（表单当前未保存的值）：以其为发送配置，令牌留空则沿用库中值
 router.post(
   '/mail/test',
-  [authenticateToken, requireSuperAdmin, body('to').isEmail().withMessage('收件地址格式不正确')],
+  [
+    authenticateToken,
+    requireSuperAdmin,
+    body('to').isEmail().withMessage('收件地址格式不正确'),
+    body('config').optional().isObject().withMessage('config 必须是对象'),
+    body('config.postUrl')
+      .optional({ values: 'falsy' })
+      .isURL({ require_tld: false })
+      .withMessage('Webhook 地址格式不正确'),
+    body('config.postPreset')
+      .optional({ values: 'falsy' })
+      .isIn(['none', 'smtogo', 'generic', 'custom_example'])
+      .withMessage('预设只能是 none/smtogo/generic/custom_example'),
+    body('config.postFieldMap')
+      .optional({ values: 'falsy' })
+      .isJSON()
+      .withMessage('字段映射必须是合法 JSON'),
+    body('config.fromAddress')
+      .optional({ values: 'falsy' })
+      .isEmail()
+      .withMessage('发件人地址格式不正确'),
+    body('config.postAuthToken')
+      .optional({ values: 'falsy' })
+      .isString()
+      .withMessage('令牌必须是字符串'),
+  ],
   (req: Request, res: Response, next: NextFunction) => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
@@ -725,8 +753,10 @@ router.post(
   },
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const config = await getMailConfig()
-      if (!config?.postUrl) {
+      // 表单当前值（未保存）优先：令牌留空沿用库中值
+      const base = (await getMailConfig()) ?? { ...DEFAULT_CONFIG }
+      const config = mergeMailConfigPatch(base, req.body.config ?? {})
+      if (!config.postUrl) {
         return next(createError('SYSTEM_MAIL_NOT_CONFIGURED', '请先配置 webhook 地址'))
       }
       const limit = await checkTestSendLimit(`user-${(req as any).user.id}`)

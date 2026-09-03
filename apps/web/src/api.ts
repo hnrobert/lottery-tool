@@ -305,10 +305,14 @@ export const systemApi = {
     })
   },
 
-  async sendTestMail(to: string): Promise<void> {
+  // 发送测试邮件；config 传表单当前值（未保存版本），令牌留空沿用库中值
+  async sendTestMail(
+    to: string,
+    config?: Partial<MailConfig> & { postAuthToken?: string },
+  ): Promise<void> {
     return apiFetch('/system/mail/test', {
       method: 'POST',
-      body: JSON.stringify({ to }),
+      body: JSON.stringify({ to, config }),
     })
   },
 }

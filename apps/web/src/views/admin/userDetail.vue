@@ -12,7 +12,7 @@
       <div class="space-y-4">
         <h3 class="text-lg font-medium text-gray-900">基本信息</h3>
 
-        <FormField v-slot="{ componentField }" name="username">
+        <FormField v-slot="{ field: componentField }" name="username">
           <FormItem>
             <FormLabel>用户名 *</FormLabel>
             <FormControl>
@@ -23,7 +23,7 @@
           </FormItem>
         </FormField>
 
-        <FormField v-slot="{ componentField }" name="email">
+        <FormField v-slot="{ field: componentField }" name="email">
           <FormItem>
             <FormLabel>邮箱 *</FormLabel>
             <FormControl>
@@ -34,7 +34,7 @@
           </FormItem>
         </FormField>
 
-        <FormField v-if="!isEditMode" v-slot="{ componentField }" name="password">
+        <FormField v-if="!isEditMode" v-slot="{ field: componentField }" name="password">
           <FormItem>
             <FormLabel>密码 *</FormLabel>
             <FormControl>
@@ -50,7 +50,7 @@
       <div class="space-y-4">
         <h3 class="text-lg font-medium text-gray-900">权限设置</h3>
 
-        <FormField v-slot="{ componentField }" name="role">
+        <FormField v-slot="{ field: componentField }" name="role">
           <FormItem>
             <FormLabel>用户角色 *</FormLabel>
             <FormControl>
@@ -73,7 +73,7 @@
           </FormItem>
         </FormField>
 
-        <FormField v-if="isEditMode" v-slot="{ componentField }" name="status">
+        <FormField v-if="isEditMode" v-slot="{ field: componentField }" name="status">
           <FormItem>
             <FormLabel>账户状态</FormLabel>
             <FormControl>
