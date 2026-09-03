@@ -173,6 +173,10 @@
               <p class="text-sm text-slate-500">感谢您的参与，请继续努力！</p>
             </div>
           </div>
+
+          <p v-if="lotteryResult?.is_demo" class="text-center text-xs text-muted-foreground">
+            测试演示——未扣减奖品库存、未写入抽奖记录
+          </p>
         </div>
 
         <DialogFooter class="pt-6">
@@ -235,6 +239,8 @@ const isDrawing = ref(false)
 const showResult = ref(false)
 const lotteryResult = ref<{
   is_winner: boolean
+  /** 测试码演示抽奖：不扣库存、不写记录 */
+  is_demo?: boolean
   prize?: Prize | null
   lottery_record?: LotteryRecord | null
   lottery_code?: {
@@ -242,6 +248,11 @@ const lotteryResult = ref<{
     participant_info?: { name: string; phone: string; email?: string }
   } | null
 } | null>(null)
+
+// URL 携带 code 时预填抽奖码（管理端演示链接）；编程式赋值不触发输入过滤，
+// 不会破坏含小写字母的码值
+const presetCode = urlParams.get('code')
+if (presetCode) lotteryCode.value = presetCode
 
 // 签字相关
 const showSignature = ref(false)
@@ -434,6 +445,7 @@ const handleDraw = async () => {
     // 统一处理抽奖结果
     lotteryResult.value = {
       is_winner: drawResponse.is_winner || false,
+      is_demo: drawResponse.is_demo === true,
       prize: drawResponse.prize || null,
       lottery_record: drawResponse.lottery_record || null,
       lottery_code: drawResponse.lottery_code || null,

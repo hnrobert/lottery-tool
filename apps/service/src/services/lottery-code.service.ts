@@ -1,6 +1,8 @@
 import { DataSource, EntityManager, In } from 'typeorm'
 import { AppDataSource } from '../utils/database'
 import { LotteryCode, ParticipantInfo } from '../entities/lottery-code.entity'
+import { Activity } from '../entities/activity.entity'
+import { generateLotteryCode } from '../utils/lottery-code-generator'
 
 const managerOf = (manager?: EntityManager): DataSource | EntityManager => manager ?? AppDataSource
 
@@ -14,12 +16,17 @@ export const findByActivityAndCode = (
 export const findById = (id: number, manager?: EntityManager): Promise<LotteryCode | null> =>
   managerOf(manager).getRepository(LotteryCode).findOneBy({ id })
 
+// 统计口径统一排除测试码（is_test）：计数、配额上限、使用率均按业务码语义
 export const countByActivity = (activityId: number, status?: string): Promise<number> => {
   const repo = AppDataSource.getRepository(LotteryCode)
   if (status) {
-    return repo.countBy({ activity_id: activityId, status: status as LotteryCode['status'] })
+    return repo.countBy({
+      activity_id: activityId,
+      status: status as LotteryCode['status'],
+      is_test: false,
+    })
   }
-  return repo.countBy({ activity_id: activityId })
+  return repo.countBy({ activity_id: activityId, is_test: false })
 }
 
 /**
@@ -43,6 +50,8 @@ export async function findByActivity(
   const qb = AppDataSource.getRepository(LotteryCode)
     .createQueryBuilder('lottery_code')
     .where('lottery_code.activity_id = :activityId', { activityId })
+    // 测试码不进管理端列表（唯一查看入口是活动列表的演示 Dialog）
+    .andWhere('lottery_code.is_test = false')
 
   if (status) {
     qb.andWhere('lottery_code.status = :status', { status })
@@ -99,6 +108,50 @@ export function createBatch(
       }),
   )
   return managerOf(manager).getRepository(LotteryCode).save(rows)
+}
+
+/**
+ * 幂等获取（或创建）活动的演示测试码：一活动至多一个（DB 部分唯一索引
+ * uq_lottery_codes_activity_is_test 兜底）。已存在且被手动置为
+ * used/invalid 时复位为 unused（测试码语义 = 永远可抽）。
+ * 不受 settings.max_lottery_codes 配额约束（countByActivity 已排除测试码）。
+ */
+export async function ensureTestCode(activity: Activity): Promise<LotteryCode> {
+  const repo = AppDataSource.getRepository(LotteryCode)
+
+  const existing = await repo.findOneBy({ activity_id: activity.id, is_test: true })
+  if (existing) {
+    if (existing.status !== 'unused') return markAsUnused(existing)
+    return existing
+  }
+
+  const format = activity.settings?.lottery_code_format || '8_digit_number'
+  // 排除集包含测试码（getAllCodesForActivity 不过滤 is_test），避免新码与既有码碰撞
+  const existingCodes = await getAllCodesForActivity(activity.id)
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateLotteryCode(format)
+    if (existingCodes.includes(code)) continue
+    try {
+      return await repo.save(
+        repo.create({ activity_id: activity.id, code, status: 'unused' as const, is_test: true }),
+      )
+    } catch (e) {
+      const constraint = (e as { code?: string; constraint?: string; detail?: string }) ?? {}
+      if (constraint.code === '23505') {
+        if (String(constraint.constraint || constraint.detail || '').includes('activity_is_test')) {
+          // 并发下别的请求已建了测试码：回查返回
+          const winner = await repo.findOneBy({ activity_id: activity.id, is_test: true })
+          if (winner) return winner
+          continue
+        }
+        // 与业务码撞车：换码重试
+        continue
+      }
+      throw e
+    }
+  }
+  throw new Error('生成测试抽奖码失败，请重试')
 }
 
 // 原checkDuplicates：返回已存在的码

@@ -64,6 +64,60 @@
       :empty-text="'Null'"
       @page-change="handlePageChange"
     />
+
+    <!-- 抽奖界面演示 Dialog -->
+    <Dialog :open="showDemoDialog" @update:open="(v: boolean) => (showDemoDialog = v)">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>抽奖界面演示</DialogTitle>
+          <DialogDescription>
+            使用测试抽奖码在真实抽奖页体验完整流程：不扣减奖品库存、不产生抽奖记录，可反复抽。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="demoLoading" class="py-6 text-center text-sm text-muted-foreground">
+          正在准备测试抽奖码...
+        </div>
+        <div v-else-if="demoError" class="py-6 text-center text-sm text-destructive">
+          {{ demoError }}
+        </div>
+        <div v-else-if="demoCode" class="space-y-4">
+          <div class="space-y-1.5">
+            <div class="text-xs text-muted-foreground">测试抽奖码（活动固定一个，可反复使用）</div>
+            <div class="flex items-center gap-2">
+              <code
+                class="flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-lg font-bold tracking-widest"
+              >
+                {{ demoCode }}
+              </code>
+              <Button variant="outline" size="sm" @click="copyText(demoCode, '抽奖码已复制')">
+                复制
+              </Button>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <div class="text-xs text-muted-foreground">抽奖页链接（自动填入测试码）</div>
+            <div class="flex items-center gap-2">
+              <code class="flex-1 truncate rounded-md border bg-muted px-3 py-2 font-mono text-xs">
+                {{ demoUrl }}
+              </code>
+              <Button variant="outline" size="sm" @click="copyText(demoUrl, '链接已复制')">
+                复制
+              </Button>
+            </div>
+            <Button class="w-full" @click="openDemoUrl">
+              <Play class="mr-1 h-4 w-4" />
+              打开抽奖页
+            </Button>
+          </div>
+
+          <p class="text-xs leading-relaxed text-muted-foreground">
+            提示：活动需处于「进行中」状态，否则抽奖页会提示活动未开始；线下抽奖模式需管理员登录后操作。
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -82,7 +136,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Plus, Trash, SquarePen, Eye } from 'lucide-vue-next'
+import { Search, Plus, Trash, SquarePen, Eye, Play } from 'lucide-vue-next'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from 'vue-sonner'
 import { API } from '@/api'
 import type { Activity } from '@/types/api'
 import type { TableColumn } from '@/components/common/types'
@@ -187,7 +249,7 @@ const columns = computed<TableColumn[]>(() => [
   {
     key: 'actions',
     title: '操作',
-    width: '120px',
+    width: '160px',
     render: (value: unknown, record: Record<string, unknown>) => {
       const activity = record as unknown as Activity
       return h('div', { class: 'flex items-center gap-2' }, [
@@ -210,6 +272,16 @@ const columns = computed<TableColumn[]>(() => [
             onClick: () => handleEditActivity(String(activity.id)),
           },
           [h(SquarePen, { size: 16 })],
+        ),
+        h(
+          'button',
+          {
+            class:
+              'inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8',
+            title: '抽奖界面演示',
+            onClick: () => handleDemoActivity(String(activity.id)),
+          },
+          [h(Play, { size: 16 })],
         ),
         h(
           'button',
@@ -310,6 +382,57 @@ const handleDeleteActivity = async (id: string) => {
       alert('删除失败，请稍后重试')
     }
   }
+}
+
+// ---- 抽奖界面演示 ----
+const showDemoDialog = ref(false)
+const demoLoading = ref(false)
+const demoError = ref('')
+const demoCode = ref('')
+const demoActivityId = ref(0)
+const demoUrl = computed(
+  () => `${location.origin}/lottery?activityId=${demoActivityId.value}&code=${demoCode.value}`,
+)
+
+const handleDemoActivity = async (id: string) => {
+  demoActivityId.value = Number(id)
+  showDemoDialog.value = true
+  demoLoading.value = true
+  demoError.value = ''
+  demoCode.value = ''
+  try {
+    const res = await API.adminActivity.ensureDemoCode(Number(id))
+    demoCode.value = res.lottery_code.code
+  } catch (error) {
+    demoError.value = error instanceof Error ? error.message : '获取测试抽奖码失败'
+  } finally {
+    demoLoading.value = false
+  }
+}
+
+const copyText = async (text: string, successMessage: string) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // 非安全上下文（如局域网 http）回退：隐藏 textarea + execCommand
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    toast.success(successMessage)
+  } catch {
+    toast.error('复制失败，请手动复制')
+  }
+}
+
+const openDemoUrl = () => {
+  window.open(demoUrl.value, '_blank')
 }
 
 // 组件挂载时获取数据

@@ -28,7 +28,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       const [totalActivities, totalLotteryCodes, totalAdmins, totalLotteryRecords] =
         await Promise.all([
           AppDataSource.getRepository(Activity).count(),
-          AppDataSource.getRepository(LotteryCode).count(),
+          AppDataSource.getRepository(LotteryCode).count({ where: { is_test: false } }),
           AppDataSource.getRepository(User).count({
             where: { role: In(['admin', 'super_admin']) },
           }),

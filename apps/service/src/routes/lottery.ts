@@ -58,6 +58,8 @@ router.get('/activities/:id', async (req: Request, res: Response, next: NextFunc
           end_time: activity.end_time,
           settings: {
             require_signature: activity.settings?.require_signature === true,
+            // 抽奖页据此设置输入框 maxlength/输入过滤（此前不透出导致 12 位格式码被截断）
+            lottery_code_format: activity.settings?.lottery_code_format || '8_digit_number',
           },
         },
         prizes: prizes.map((prize) => ({
@@ -119,6 +121,35 @@ router.post(
         )
         if (!lotteryCodeRecord) {
           throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND', '抽奖码不存在或不属于此活动')
+        }
+
+        // 演示测试码短路：概率照算走完整体验，但不扣库存、不置 used、不写记录
+        // （置于 used/invalid 检查之前——测试码被手动改态后依然可抽，「永远可抽」）
+        if (lotteryCodeRecord.is_test) {
+          const demoPrize = await PrizeService.selectByProbability(parseInt(activityId), activity, {
+            manager,
+          })
+          const demoWinner = !!demoPrize
+          const demoData: Record<string, unknown> = {
+            is_winner: demoWinner,
+            is_demo: true,
+            lottery_record: null,
+            lottery_code: {
+              code: lotteryCodeRecord.code,
+              participant_info: lotteryCodeRecord.participant_info || {},
+            },
+          }
+          if (demoPrize) {
+            demoData.prize = {
+              id: demoPrize.id,
+              name: demoPrize.name,
+              description: demoPrize.description,
+            }
+          }
+          return {
+            responseData: demoData,
+            message: demoWinner ? '恭喜您中奖了！' : '很遗憾，您没有中奖',
+          }
         }
 
         // 检查抽奖码是否已使用
@@ -255,6 +286,45 @@ router.post(
         )
         if (!lotteryCodeRecord) {
           throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND', '抽奖码不存在或不属于此活动')
+        }
+
+        // 演示测试码短路：同线上 draw，指定 prize_id 时照常校验但不扣库存
+        if (lotteryCodeRecord.is_test) {
+          let demoPrize: Prize | null = null
+          if (prize_id) {
+            const prize = await manager.getRepository(Prize).findOneBy({ id: parseInt(prize_id) })
+            if (!prize || prize.activity_id !== parseInt(activityId)) {
+              throw createError('VALIDATION_INVALID_FORMAT', '奖品不存在或不属于此活动')
+            }
+            if (prize.remaining_quantity <= 0) {
+              throw createError('BUSINESS_PRIZE_OUT_OF_STOCK')
+            }
+            demoPrize = prize
+          } else {
+            demoPrize = await PrizeService.selectByProbability(parseInt(activityId), activity, {
+              manager,
+            })
+          }
+          const demoData: Record<string, unknown> = {
+            is_winner: !!demoPrize,
+            is_demo: true,
+            lottery_record: null,
+            lottery_code: {
+              code: lotteryCodeRecord.code,
+              participant_info: lotteryCodeRecord.participant_info || {},
+            },
+          }
+          if (demoPrize) {
+            demoData.prize = {
+              id: demoPrize.id,
+              name: demoPrize.name,
+              description: demoPrize.description,
+            }
+          }
+          return {
+            responseData: demoData,
+            message: demoPrize ? '恭喜您中奖了！' : '很遗憾，您没有中奖',
+          }
         }
 
         // 检查抽奖码是否已使用

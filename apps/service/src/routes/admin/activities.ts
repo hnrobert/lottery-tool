@@ -396,6 +396,35 @@ router.post(
 )
 
 /**
+ * @route   POST /api/admin/activities/:id/lottery-codes/demo
+ * @desc    幂等获取（或创建）活动的演示测试码（不占 max_lottery_codes 配额）
+ * @access  Private (Admin)
+ */
+router.post('/:id/lottery-codes/demo', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const activityId = req.params.id
+    const activity = await requireActivityAccess(activityId, req)
+
+    const code = await LotteryCodeService.ensureTestCode(activity)
+
+    res.json({
+      success: true,
+      data: {
+        lottery_code: {
+          id: code.id,
+          code: code.code,
+          status: code.status,
+          is_test: true,
+        },
+      },
+      message: '测试抽奖码已就绪',
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+/**
  * @route   GET /api/admin/activities/:id/webhook-info
  * @desc    获取活动的Webhook接口信息
  * @access  Private (Admin)
