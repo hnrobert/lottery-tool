@@ -18,7 +18,10 @@ import * as ActivityService from '../../services/activity.service'
 import * as PrizeService from '../../services/prize.service'
 import * as LotteryCodeService from '../../services/lottery-code.service'
 import * as LotteryRecordService from '../../services/lottery-record.service'
-import { OPERATION_TYPES } from '../../services/operation-log.service'
+import {
+  OPERATION_TYPES,
+  logActivityOperation as writeActivityLog,
+} from '../../services/operation-log.service'
 
 const router = express.Router()
 
@@ -58,8 +61,8 @@ router.get(
     query('search').optional().isLength({ max: 100 }).withMessage('搜索关键词不能超过100个字符'),
     query('status')
       .optional()
-      .isIn(['draft', 'active', 'ended'])
-      .withMessage('状态只能是draft、active或ended'),
+      .isIn(['draft', 'ready', 'active', 'ended'])
+      .withMessage('状态只能是draft、ready、active或ended'),
   ],
   validateRequest,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -214,11 +217,6 @@ router.put(
       .isLength({ max: 1000 })
       .withMessage('活动描述不能超过1000个字符'),
 
-    body('status')
-      .optional()
-      .isIn(['draft', 'active', 'ended'])
-      .withMessage('状态只能是draft、active或ended'),
-
     body('start_time').optional().isISO8601().withMessage('开始时间格式错误'),
 
     body('end_time').optional().isISO8601().withMessage('结束时间格式错误'),
@@ -228,23 +226,37 @@ router.put(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const activityId = req.params.id
-      const updateData = req.body
+
+      // 状态只走 PATCH /:id/status（有流转矩阵约束），PUT 一律拒绝
+      if ('status' in req.body) {
+        throw createError(
+          'VALIDATION_INVALID_FORMAT',
+          '状态修改请使用 PATCH /api/admin/activities/:id/status',
+        )
+      }
 
       const activity = await requireActivityAccess(activityId, req)
 
-      // 验证时间逻辑
-      const startTime = updateData.start_time
-        ? new Date(updateData.start_time)
-        : activity.start_time
-      const endTime = updateData.end_time ? new Date(updateData.end_time) : activity.end_time
+      // 白名单解构：只有这四个字段可经 PUT 修改（settings/webhook/created_by 等不可覆盖）
+      const { name, description, start_time, end_time } = req.body
+      const updateData: Partial<Activity> = {}
+      if (name !== undefined) updateData.name = name
+      if (description !== undefined) updateData.description = description
+      if (start_time !== undefined) {
+        updateData.start_time = start_time ? new Date(start_time) : null
+      }
+      if (end_time !== undefined) {
+        updateData.end_time = end_time ? new Date(end_time) : null
+      }
+
+      // 验证时间逻辑（与已有值合并后判断）
+      const startTime =
+        updateData.start_time !== undefined ? updateData.start_time : activity.start_time
+      const endTime = updateData.end_time !== undefined ? updateData.end_time : activity.end_time
 
       if (startTime && endTime && startTime >= endTime) {
         throw createError('VALIDATION_INVALID_FORMAT', '开始时间必须早于结束时间')
       }
-
-      // 更新活动（时间字段转Date）
-      if (updateData.start_time) updateData.start_time = new Date(updateData.start_time)
-      if (updateData.end_time) updateData.end_time = new Date(updateData.end_time)
 
       const updated = await AppDataSource.getRepository(Activity).save({
         ...activity,
@@ -257,6 +269,66 @@ router.put(
           activity: updated,
         },
         message: '活动更新成功',
+      })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+/**
+ * @route   PATCH /api/admin/activities/:id/status
+ * @desc    活动状态流转（受流转矩阵约束：draft→ready→active→ended，ready 可撤回）
+ * @access  Private (Admin)
+ */
+router.patch(
+  '/:id/status',
+  [
+    body('status')
+      .isIn(['draft', 'ready', 'active', 'ended'])
+      .withMessage('状态只能是draft、ready、active或ended'),
+  ],
+  validateRequest,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const activityId = req.params.id
+      const target = req.body.status as Activity['status']
+
+      const activity = await requireActivityAccess(activityId, req)
+
+      if (!ActivityService.canTransition(activity.status, target)) {
+        throw createError(
+          'VALIDATION_INVALID_FORMAT',
+          `不允许的状态流转: ${activity.status} → ${target}`,
+        )
+      }
+
+      const updated = await ActivityService.transitionStatus(activity, target)
+
+      // 手工写操作日志（不走中间件：operationType 随 body 目标状态变化）
+      const logType =
+        target === 'ready'
+          ? OPERATION_TYPES.PUBLISH_ACTIVITY
+          : target === 'active'
+            ? OPERATION_TYPES.ACTIVATE_ACTIVITY
+            : target === 'ended'
+              ? OPERATION_TYPES.END_ACTIVITY
+              : OPERATION_TYPES.WITHDRAW_ACTIVITY
+      await writeActivityLog(
+        logType,
+        (req as any).user.id,
+        updated.id,
+        updated.name,
+        req.ip || '',
+        req.get('User-Agent') || '',
+      )
+
+      res.json({
+        success: true,
+        data: {
+          activity: updated,
+        },
+        message: `活动已${target === 'ready' ? '发布（就绪）' : target === 'active' ? '开始' : target === 'ended' ? '结束' : '撤回为草稿'}`,
       })
     } catch (error) {
       next(error)
@@ -278,9 +350,9 @@ router.delete(
 
       const activity = await requireActivityAccess(activityId, req)
 
-      // 检查活动状态
-      if (activity.status === 'active') {
-        throw createError('VALIDATION_INVALID_FORMAT', '不能删除进行中的活动')
+      // 检查活动状态（ready 活动的码可能已分发，同样不可删）
+      if (activity.status === 'active' || activity.status === 'ready') {
+        throw createError('VALIDATION_INVALID_FORMAT', '不能删除已就绪或进行中的活动')
       }
 
       await AppDataSource.getRepository(Activity).remove(activity)

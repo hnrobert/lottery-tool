@@ -278,6 +278,12 @@ router.post(
           throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动')
         }
 
+        // 状态/时间校验：与线上 draw 统一（此前线下完全不查，draft 也能抽）
+        const offlineCanStart = ActivityService.canStartLottery(activity)
+        if (!offlineCanStart.canStart) {
+          throw createError('BUSINESS_ACTIVITY_NOT_STARTED', offlineCanStart.reason)
+        }
+
         // 查找抽奖码
         const lotteryCodeRecord = await LotteryCodeService.findByActivityAndCode(
           parseInt(activityId),

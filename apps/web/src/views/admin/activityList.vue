@@ -26,7 +26,8 @@
           <SelectContent>
             <SelectItem value="all">State</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="ready">Ready</SelectItem>
+            <SelectItem value="active">Ongoing</SelectItem>
             <SelectItem value="ended">Ended</SelectItem>
           </SelectContent>
         </Select>
@@ -177,7 +178,8 @@ const modeFilter = ref('all')
 const getStatusBadge = (status: string) => {
   const statusMap = {
     draft: { label: 'Draft', variant: 'secondary' as const },
-    active: { label: 'Active', variant: 'default' as const },
+    ready: { label: 'Ready', variant: 'outline' as const },
+    active: { label: 'Ongoing', variant: 'default' as const },
     ended: { label: 'Ended', variant: 'destructive' as const },
   }
   return (
@@ -219,7 +221,21 @@ const columns = computed<TableColumn[]>(() => [
     render: (value: unknown, record: Record<string, unknown>) => {
       const activity = record as unknown as Activity
       const badge = getStatusBadge(activity.status)
-      return `<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-${badge.variant === 'default' ? 'primary' : badge.variant === 'secondary' ? 'secondary' : 'muted'} text-${badge.variant === 'default' ? 'primary-foreground' : 'foreground'}">${badge.label}</span>`
+      const bg =
+        badge.variant === 'default'
+          ? 'bg-primary'
+          : badge.variant === 'outline'
+            ? 'bg-blue-100'
+            : badge.variant === 'secondary'
+              ? 'bg-secondary'
+              : 'bg-muted'
+      const fg =
+        badge.variant === 'default'
+          ? 'text-primary-foreground'
+          : badge.variant === 'outline'
+            ? 'text-blue-700'
+            : 'text-foreground'
+      return `<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${bg} ${fg}">${badge.label}</span>`
     },
   },
   {

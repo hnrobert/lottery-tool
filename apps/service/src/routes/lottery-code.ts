@@ -4,6 +4,7 @@ import { In } from 'typeorm'
 import { AppDataSource } from '../utils/database'
 import { LotteryCode } from '../entities/lottery-code.entity'
 import { Activity } from '../entities/activity.entity'
+import * as ActivityService from '../services/activity.service'
 
 const router = express.Router()
 
@@ -53,20 +54,12 @@ router.get(
 
       const activity = lotteryCode.activity
 
-      // 检查活动状态
-      if (activity.status !== 'active') {
+      // 统一的开放判定（null 安全；替代原 status+时间两段内联检查）
+      const state = ActivityService.getActivityOpenState(activity)
+      if (!state.open) {
         return res.status(400).json({
           success: false,
-          message: '活动已结束或未开始',
-        })
-      }
-
-      // 检查活动时间
-      const now = new Date()
-      if (now < activity.start_time || now > activity.end_time) {
-        return res.status(400).json({
-          success: false,
-          message: '活动不在有效时间内',
+          message: state.message,
         })
       }
 
@@ -138,25 +131,14 @@ router.get(
 
       const activity = lotteryCode.activity
 
-      // 检查活动状态
-      if (activity.status !== 'active') {
+      // 统一的开放判定（null 安全）
+      const state = ActivityService.getActivityOpenState(activity)
+      if (!state.open) {
         return res.json({
           success: true,
           data: {
             valid: false,
-            message: '活动已结束或未开始',
-          },
-        })
-      }
-
-      // 检查活动时间
-      const now = new Date()
-      if (now < activity.start_time || now > activity.end_time) {
-        return res.json({
-          success: true,
-          data: {
-            valid: false,
-            message: '活动不在有效时间内',
+            message: state.message,
           },
         })
       }
@@ -308,22 +290,13 @@ router.post(
 
         const activity = lotteryCode.activity
 
-        // 检查活动状态
-        if (activity.status !== 'active') {
+        // 统一的开放判定（null 安全）
+        const state = ActivityService.getActivityOpenState(activity)
+        if (!state.open) {
           return {
             code,
             valid: false,
-            message: '活动已结束或未开始',
-          }
-        }
-
-        // 检查活动时间
-        const now = new Date()
-        if (now < activity.start_time || now > activity.end_time) {
-          return {
-            code,
-            valid: false,
-            message: '活动不在有效时间内',
+            message: state.message,
           }
         }
 

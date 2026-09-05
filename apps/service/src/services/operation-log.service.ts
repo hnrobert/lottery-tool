@@ -17,6 +17,8 @@ export const OPERATION_TYPES: Record<string, string> = {
   DELETE_ACTIVITY: 'DELETE_ACTIVITY',
   ACTIVATE_ACTIVITY: 'ACTIVATE_ACTIVITY',
   END_ACTIVITY: 'END_ACTIVITY',
+  PUBLISH_ACTIVITY: 'PUBLISH_ACTIVITY',
+  WITHDRAW_ACTIVITY: 'WITHDRAW_ACTIVITY',
 
   // 奖品管理
   CREATE_PRIZE: 'CREATE_PRIZE',
@@ -120,8 +122,10 @@ export function logActivityOperation(
     [OPERATION_TYPES.CREATE_ACTIVITY]: `创建活动: ${activityName}`,
     [OPERATION_TYPES.UPDATE_ACTIVITY]: `更新活动: ${activityName}`,
     [OPERATION_TYPES.DELETE_ACTIVITY]: `删除活动: ${activityName}`,
-    [OPERATION_TYPES.ACTIVATE_ACTIVITY]: `激活活动: ${activityName}`,
+    [OPERATION_TYPES.ACTIVATE_ACTIVITY]: `开始活动: ${activityName}`,
     [OPERATION_TYPES.END_ACTIVITY]: `结束活动: ${activityName}`,
+    [OPERATION_TYPES.PUBLISH_ACTIVITY]: `发布活动: ${activityName}`,
+    [OPERATION_TYPES.WITHDRAW_ACTIVITY]: `撤回发布: ${activityName}`,
   }
 
   return log({

@@ -307,11 +307,16 @@ const loadActivity = async () => {
   try {
     const { activity } = await adminActivityApi.getActivity(activityId.value)
 
-    // 格式化时间为 datetime-local 格式
+    // 格式化时间为 datetime-local 格式（按浏览器本地时区；
+    // 原用 toISOString 是 UTC，非 UTC 时区用户回显偏移数小时）
     const formatDateTime = (dateStr?: string) => {
       if (!dateStr) return ''
       const date = new Date(dateStr)
-      return date.toISOString().slice(0, 16)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      return (
+        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+        `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+      )
     }
 
     form.setValues({

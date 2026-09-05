@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { AppDataSource } from '../utils/database'
-import { Activity, ActivitySettings } from '../entities/activity.entity'
+import { Activity, ActivitySettings, ActivityStatus } from '../entities/activity.entity'
 import * as LotteryCodeService from './lottery-code.service'
 import * as PrizeService from './prize.service'
 import * as LotteryRecordService from './lottery-record.service'
@@ -41,23 +41,52 @@ export const findById = (id: number): Promise<Activity | null> =>
 export const findByWebhookId = (webhookId: string): Promise<Activity | null> =>
   AppDataSource.getRepository(Activity).findOneBy({ webhook_id: webhookId })
 
-// 原canStartLottery实例方法
-export function canStartLottery(activity: Activity): { canStart: boolean; reason?: string } {
-  const now = new Date()
+// 状态机流转矩阵：draft→ready（发布）→active（手动立即开始/定时到点）→ended（手动/到点）；
+// ready 可撤回 draft；active/ended 不可逆
+const ALLOWED_TRANSITIONS: Record<ActivityStatus, ActivityStatus[]> = {
+  draft: ['ready'],
+  ready: ['draft', 'active'],
+  active: ['ended'],
+  ended: [],
+}
 
-  if (activity.status !== 'active') {
-    return { canStart: false, reason: '活动未激活' }
+export function canTransition(from: ActivityStatus, to: ActivityStatus): boolean {
+  return ALLOWED_TRANSITIONS[from]?.includes(to) === true
+}
+
+export async function transitionStatus(activity: Activity, to: ActivityStatus): Promise<Activity> {
+  if (!canTransition(activity.status, to)) {
+    throw new Error(`不允许的状态流转: ${activity.status} → ${to}`)
   }
+  return AppDataSource.getRepository(Activity).save({ ...activity, status: to })
+}
 
+/**
+ * 共享的活动开放判定（null 安全）：ended → 已结束；draft/ready → 未开始；
+ * 时间窗 null 视为不限制。canStartLottery 与抽奖码公开校验接口统一走此函数
+ * （原三处内联实现不一致：lottery-code.ts 对 null end_time 恒判超时）。
+ */
+export function getActivityOpenState(
+  activity: Activity,
+  now: Date = new Date(),
+): { open: boolean; message?: string } {
+  if (activity.status === 'ended') return { open: false, message: '活动已结束' }
+  if (activity.status === 'draft' || activity.status === 'ready') {
+    return { open: false, message: '活动未开始' }
+  }
   if (activity.start_time && now < activity.start_time) {
-    return { canStart: false, reason: '活动未开始' }
+    return { open: false, message: '活动未开始' }
   }
-
   if (activity.end_time && now > activity.end_time) {
-    return { canStart: false, reason: '活动已结束' }
+    return { open: false, message: '活动已结束' }
   }
+  return { open: true }
+}
 
-  return { canStart: true }
+// 原canStartLottery实例方法（薄包装，签名不变）
+export function canStartLottery(activity: Activity): { canStart: boolean; reason?: string } {
+  const { open, message } = getActivityOpenState(activity)
+  return open ? { canStart: true } : { canStart: false, reason: message }
 }
 
 // 原getStatistics实例方法

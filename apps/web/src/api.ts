@@ -13,6 +13,7 @@ import type {
   UpdateUserRequest,
   CreateActivityRequest,
   UpdateActivityRequest,
+  UpdateActivityStatusRequest,
   DrawLotteryRequest,
   CreatePrizeRequest,
   UpdatePrizeRequest,
@@ -347,6 +348,17 @@ export const adminActivityApi = {
     return apiFetch(`/admin/activities/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    })
+  },
+
+  // 状态流转（受矩阵约束：draft→ready→active→ended，ready 可撤回）
+  async updateActivityStatus(
+    id: number,
+    status: UpdateActivityStatusRequest['status'],
+  ): Promise<{ activity: Activity }> {
+    return apiFetch(`/admin/activities/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
     })
   },
 

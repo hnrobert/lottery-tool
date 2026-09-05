@@ -791,7 +791,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       activityRepo.count(),
       activityRepo.count({ where: { status: 'active' } }),
     ])
-    // 非进行中（draft + ended）计为 inactive
+    // 非进行中（draft + ready + ended）计为 inactive
     const inactiveActivities = totalActivities - activeActivities
 
     // 抽奖记录统计

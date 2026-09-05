@@ -108,7 +108,11 @@ export const logActivityOperation = (operationType: string) => {
         case OPERATION_TYPES.DELETE_ACTIVITY:
           return `删除活动: ${activityName}`
         case OPERATION_TYPES.ACTIVATE_ACTIVITY:
-          return `激活活动: ${activityName}`
+          return `开始活动: ${activityName}`
+        case OPERATION_TYPES.PUBLISH_ACTIVITY:
+          return `发布活动: ${activityName}`
+        case OPERATION_TYPES.WITHDRAW_ACTIVITY:
+          return `撤回发布: ${activityName}`
         case OPERATION_TYPES.END_ACTIVITY:
           return `结束活动: ${activityName}`
         default:

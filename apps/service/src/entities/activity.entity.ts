@@ -21,7 +21,7 @@ export interface ActivitySettings {
 }
 
 export type LotteryMode = 'offline' | 'online'
-export type ActivityStatus = 'draft' | 'active' | 'ended'
+export type ActivityStatus = 'draft' | 'ready' | 'active' | 'ended'
 
 @Entity({ name: 'activities' })
 @Index('uq_activities_webhook_id', ['webhook_id'], { unique: true })
@@ -56,7 +56,7 @@ export class Activity {
   @Column({
     name: 'status',
     type: 'enum',
-    enum: ['draft', 'active', 'ended'],
+    enum: ['draft', 'ready', 'active', 'ended'],
     enumName: 'activity_status_enum',
     nullable: false,
     default: 'draft',

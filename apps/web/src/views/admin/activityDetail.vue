@@ -5,6 +5,58 @@
       :sub-title="activity?.description || ''"
     />
 
+    <!-- 状态卡：状态流转主阵地（draft→ready→active→ended，ready 可撤回） -->
+    <div class="rounded-lg border p-4">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium">活动状态</span>
+            <span
+              class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium"
+              :class="statusBadgeClass"
+            >
+              {{ statusLabel }}
+            </span>
+          </div>
+          <div class="text-xs text-muted-foreground">
+            开始：{{ formatTime(activity?.start_time) }} · 结束：{{
+              formatTime(activity?.end_time)
+            }}
+            <template v-if="activity?.status === 'ready' && !activity?.start_time">
+              · 未设置开始时间，到期扫描（每分钟）后将立即开始
+            </template>
+          </div>
+        </div>
+
+        <!-- 按流转矩阵渲染操作 -->
+        <div class="flex flex-wrap gap-2">
+          <template v-if="activity?.status === 'draft'">
+            <Button :disabled="transitioning" @click="handleTransition('ready')">
+              发布（就绪）
+            </Button>
+          </template>
+          <template v-else-if="activity?.status === 'ready'">
+            <Button :disabled="transitioning" @click="handleTransition('active')">
+              立即开始
+            </Button>
+            <Button variant="outline" :disabled="transitioning" @click="handleTransition('draft')">
+              撤回发布
+            </Button>
+          </template>
+          <template v-else-if="activity?.status === 'active'">
+            <Button
+              variant="destructive"
+              :disabled="transitioning"
+              @click="handleTransition('ended')"
+            >
+              结束活动
+            </Button>
+          </template>
+          <span v-else class="text-xs text-muted-foreground self-center"> 活动已结束（终态） </span>
+        </div>
+      </div>
+    </div>
+
     <!-- 概览数值卡片 -->
     <div class="grid md:grid-cols-3 grid-cols-1 gap-4">
       <NumberCard title="奖品种数" :value="prizeTypeCount" :icon="Gift" />
@@ -94,6 +146,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Package, Gift, Search, Ticket, Eye } from 'lucide-vue-next'
 import { API } from '@/api'
+import { toast } from 'vue-sonner'
 import type { Activity, Prize, LotteryRecord } from '@/types/api'
 import type { TableColumn } from '@/components/common/types'
 
@@ -228,6 +281,45 @@ const fetchActivity = async () => {
   } catch {
     // 获取活动详情失败
     activity.value = null
+  }
+}
+
+// ---- 状态流转 ----
+const transitioning = ref(false)
+
+const STATUS_META: Record<string, { label: string; class: string }> = {
+  draft: { label: 'Draft', class: 'bg-muted text-foreground' },
+  ready: { label: 'Ready', class: 'bg-blue-100 text-blue-700' },
+  active: { label: 'Ongoing', class: 'bg-green-100 text-green-700' },
+  ended: { label: 'Ended', class: 'bg-red-100 text-red-700' },
+}
+
+const statusLabel = computed(() => STATUS_META[activity.value?.status ?? 'draft']?.label ?? '-')
+const statusBadgeClass = computed(
+  () => STATUS_META[activity.value?.status ?? 'draft']?.class ?? 'bg-muted text-foreground',
+)
+
+const formatTime = (t?: string | null) =>
+  t ? new Date(t).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' }) : '不限'
+
+const handleTransition = async (target: 'draft' | 'ready' | 'active' | 'ended') => {
+  const actionText =
+    target === 'ended'
+      ? '确定要结束该活动吗？结束后不可恢复。'
+      : target === 'draft'
+        ? '确定要撤回发布吗？活动将回到草稿状态。'
+        : null
+  if (actionText && !confirm(actionText)) return
+
+  transitioning.value = true
+  try {
+    await API.adminActivity.updateActivityStatus(activityId, target)
+    toast.success('状态已更新')
+    await fetchActivity()
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : '状态更新失败')
+  } finally {
+    transitioning.value = false
   }
 }
 

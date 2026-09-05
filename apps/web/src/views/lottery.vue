@@ -363,7 +363,7 @@ const loadActivityInfo = async () => {
 
     // 检查活动状态
     if (activityInfo.value.status !== 'active') {
-      error.value = '活动未开始或已结束'
+      error.value = activityInfo.value.status === 'ended' ? '活动已结束' : '活动未开始'
       return
     }
   } catch (err) {

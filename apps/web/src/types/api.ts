@@ -9,12 +9,14 @@ export interface User {
   updated_at: string
 }
 
+export type ActivityStatus = 'draft' | 'ready' | 'active' | 'ended'
+
 export interface Activity {
   id: number
   name: string
   description?: string
   icon?: string
-  status: 'draft' | 'active' | 'ended'
+  status: ActivityStatus
   lottery_mode: 'offline' | 'online'
   start_time?: string
   end_time?: string
@@ -177,9 +179,13 @@ export interface CreateActivityRequest {
 export interface UpdateActivityRequest {
   name?: string
   description?: string
-  status?: 'draft' | 'active' | 'ended'
   start_time?: string
   end_time?: string
+}
+
+/** 状态流转走专用端点 PATCH /admin/activities/:id/status（受流转矩阵约束） */
+export interface UpdateActivityStatusRequest {
+  status: ActivityStatus
 }
 
 export interface DrawLotteryRequest {
@@ -241,7 +247,7 @@ export interface UserListParams extends SearchParams {
 }
 
 export interface ActivityListParams extends SearchParams {
-  status?: 'draft' | 'active' | 'ended'
+  status?: ActivityStatus
   lottery_mode?: 'offline' | 'online'
 }
 

@@ -3,8 +3,9 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
-import { initDataSource } from './utils/database'
+import { initDataSource, AppDataSource } from './utils/database'
 import { seedSuperAdminFromEnv } from './services/user.service'
+import { startScheduler } from './services/activity-status-scheduler'
 import errorHandler from './middleware/error-handler'
 
 dotenv.config()
@@ -67,6 +68,11 @@ export const createApp = async (): Promise<void> => {
     } else {
       process.exit(1)
     }
+  }
+
+  // 活动状态定时流转（启动即补扫停机期间到点的活动，之后每分钟一轮）
+  if (AppDataSource.isInitialized) {
+    startScheduler()
   }
 
   // 路由
