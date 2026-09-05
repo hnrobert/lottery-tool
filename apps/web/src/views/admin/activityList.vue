@@ -66,9 +66,9 @@
       @page-change="handlePageChange"
     />
 
-    <!-- 抽奖界面演示 Dialog -->
+    <!-- 抽奖界面演示 Dialog（ScrollContent：内容超高可滚；长文本 break-all 换行防溢出） -->
     <Dialog :open="showDemoDialog" @update:open="(v: boolean) => (showDemoDialog = v)">
-      <DialogContent class="sm:max-w-lg">
+      <DialogScrollContent class="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>抽奖界面演示</DialogTitle>
           <DialogDescription>
@@ -85,10 +85,9 @@
         <div v-else-if="demoCode" class="space-y-4">
           <div class="space-y-1.5">
             <div class="text-xs text-muted-foreground">测试抽奖码（活动固定一个，可反复使用）</div>
-            <div class="flex items-center gap-2">
-              <!-- min-w-0 + break-all：flex 子项默认 min-width:auto 会撑破容器 -->
+            <div class="flex flex-wrap items-center gap-2">
               <code
-                class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 text-center font-mono text-lg font-bold tracking-widest break-all"
+                class="min-w-0 flex-1 basis-40 rounded-md border bg-muted px-3 py-2 text-center font-mono text-lg font-bold tracking-widest break-all"
               >
                 {{ demoCode }}
               </code>
@@ -105,9 +104,10 @@
 
           <div class="space-y-1.5">
             <div class="text-xs text-muted-foreground">抽奖页链接（自动填入测试码）</div>
-            <div class="flex items-center gap-2">
+            <!-- break-all 换行显示完整链接：不依赖 flex 收缩链，天然不溢出 -->
+            <div class="flex flex-wrap items-center gap-2">
               <code
-                class="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 font-mono text-xs"
+                class="min-w-0 flex-1 basis-40 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
               >
                 {{ demoUrl }}
               </code>
@@ -127,10 +127,10 @@
           </div>
 
           <p class="text-xs leading-relaxed text-muted-foreground">
-            提示：活动需处于「进行中」状态，否则抽奖页会提示活动未开始；线下抽奖模式需管理员登录后操作。
+            提示：测试码无视活动状态与起止时间，任意阶段均可演示抽奖；线下抽奖模式需管理员登录后操作。
           </p>
         </div>
-      </DialogContent>
+      </DialogScrollContent>
     </Dialog>
   </div>
 </template>
@@ -153,9 +153,9 @@ import {
 import { Search, Plus, Trash, SquarePen, Eye, Play } from 'lucide-vue-next'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
+  DialogScrollContent,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'vue-sonner'

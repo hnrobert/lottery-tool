@@ -107,12 +107,6 @@ router.post(
           throw createError('BUSINESS_ACTIVITY_NOT_FOUND')
         }
 
-        // 检查活动是否可以抽奖
-        const canStart = ActivityService.canStartLottery(activity)
-        if (!canStart.canStart) {
-          throw createError('BUSINESS_ACTIVITY_NOT_STARTED', canStart.reason)
-        }
-
         // 查找抽奖码
         const lotteryCodeRecord = await LotteryCodeService.findByActivityAndCode(
           parseInt(activityId),
@@ -123,8 +117,9 @@ router.post(
           throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND', '抽奖码不存在或不属于此活动')
         }
 
-        // 演示测试码短路：概率照算走完整体验，但不扣库存、不置 used、不写记录
-        // （置于 used/invalid 检查之前——测试码被手动改态后依然可抽，「永远可抽」）
+        // 演示测试码短路：概率照算走完整体验，但不扣库存、不置 used、不写记录。
+        // 置于状态/时间/used 检查之前——测试码无视活动起止与状态，「永远可抽」，
+        // 供管理员在任意阶段演示抽奖界面
         if (lotteryCodeRecord.is_test) {
           const demoPrize = await PrizeService.selectByProbability(parseInt(activityId), activity, {
             manager,
@@ -150,6 +145,12 @@ router.post(
             responseData: demoData,
             message: demoWinner ? '恭喜您中奖了！' : '很遗憾，您没有中奖',
           }
+        }
+
+        // 检查活动是否可以抽奖（真实码路径；测试码已在上方短路放行）
+        const canStart = ActivityService.canStartLottery(activity)
+        if (!canStart.canStart) {
+          throw createError('BUSINESS_ACTIVITY_NOT_STARTED', canStart.reason)
         }
 
         // 检查抽奖码是否已使用
@@ -278,12 +279,6 @@ router.post(
           throw createError('AUTH_INSUFFICIENT_PERMISSION', '只能管理自己创建的活动')
         }
 
-        // 状态/时间校验：与线上 draw 统一（此前线下完全不查，draft 也能抽）
-        const offlineCanStart = ActivityService.canStartLottery(activity)
-        if (!offlineCanStart.canStart) {
-          throw createError('BUSINESS_ACTIVITY_NOT_STARTED', offlineCanStart.reason)
-        }
-
         // 查找抽奖码
         const lotteryCodeRecord = await LotteryCodeService.findByActivityAndCode(
           parseInt(activityId),
@@ -294,7 +289,8 @@ router.post(
           throw createError('BUSINESS_LOTTERY_CODE_NOT_FOUND', '抽奖码不存在或不属于此活动')
         }
 
-        // 演示测试码短路：同线上 draw，指定 prize_id 时照常校验但不扣库存
+        // 演示测试码短路：同线上 draw——置于状态/时间检查之前（无视活动起止与状态），
+        // 指定 prize_id 时照常校验但不扣库存
         if (lotteryCodeRecord.is_test) {
           let demoPrize: Prize | null = null
           if (prize_id) {
@@ -331,6 +327,12 @@ router.post(
             responseData: demoData,
             message: demoPrize ? '恭喜您中奖了！' : '很遗憾，您没有中奖',
           }
+        }
+
+        // 状态/时间校验（真实码路径）：与线上 draw 统一（此前线下完全不查）
+        const offlineCanStart = ActivityService.canStartLottery(activity)
+        if (!offlineCanStart.canStart) {
+          throw createError('BUSINESS_ACTIVITY_NOT_STARTED', offlineCanStart.reason)
         }
 
         // 检查抽奖码是否已使用

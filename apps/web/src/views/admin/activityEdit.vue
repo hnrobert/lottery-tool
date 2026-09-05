@@ -57,6 +57,25 @@
             <FormMessage />
           </FormItem>
         </FormField>
+
+        <!-- 活动状态（仅编辑模式；创建恒为草稿。选项 = 当前状态 + 合法流转目标） -->
+        <div v-if="isEditMode" class="grid gap-2">
+          <Label>活动状态</Label>
+          <Select v-model="selectedStatus">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="选择状态" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="s in statusOptions" :key="s" :value="s">
+                {{ STATUS_LABELS[s] }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-muted-foreground">
+            流转约束：草稿 → 已就绪（到开始时间自动进行）→ 进行中 →
+            已结束（终态）；已就绪可撤回，保存时应用。
+          </p>
+        </div>
       </div>
 
       <!-- 时间设置 -->
@@ -219,9 +238,16 @@ import {
 } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 import { adminActivityApi } from '@/api'
-import type { CreateActivityRequest, UpdateActivityRequest } from '@/types/api'
+import type { ActivityStatus, CreateActivityRequest, UpdateActivityRequest } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -331,11 +357,35 @@ const loadActivity = async () => {
         require_signature: activity.settings?.require_signature || false,
       },
     })
+    selectedStatus.value = activity.status
+    originalStatus.value = activity.status
   } catch (error) {
     console.error('加载活动数据失败:', error)
     toast.error('加载活动数据失败')
   }
 }
+
+// ---- 活动状态切换（仅编辑模式；走专用端点，受流转矩阵约束） ----
+const STATUS_LABELS: Record<ActivityStatus, string> = {
+  draft: '草稿（未就绪）',
+  ready: '已就绪（到点自动开始）',
+  active: '进行中',
+  ended: '已结束（终态）',
+}
+// 与后端 ALLOWED_TRANSITIONS 镜像
+const STATUS_TRANSITIONS: Record<ActivityStatus, ActivityStatus[]> = {
+  draft: ['ready'],
+  ready: ['draft', 'active'],
+  active: ['ended'],
+  ended: [],
+}
+
+const selectedStatus = ref<ActivityStatus>('draft')
+const originalStatus = ref<ActivityStatus>('draft')
+const statusOptions = computed(() => [
+  originalStatus.value,
+  ...STATUS_TRANSITIONS[originalStatus.value],
+])
 
 // 表单提交
 const onSubmit = form.handleSubmit(async (values) => {
@@ -364,6 +414,10 @@ const onSubmit = form.handleSubmit(async (values) => {
     if (isEditMode.value && activityId.value) {
       // 更新活动
       await adminActivityApi.updateActivity(activityId.value, formData as UpdateActivityRequest)
+      // 状态变化走专用端点（基本信息更新之后）
+      if (selectedStatus.value !== originalStatus.value) {
+        await adminActivityApi.updateActivityStatus(activityId.value, selectedStatus.value)
+      }
       toast.success('活动更新成功')
     } else {
       // 创建活动

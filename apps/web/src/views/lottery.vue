@@ -361,10 +361,13 @@ const loadActivityInfo = async () => {
     activityInfo.value = response.activity
     prizes.value = response.prizes || []
 
-    // 检查活动状态
-    if (activityInfo.value.status !== 'active') {
+    // 检查活动状态（URL 带 code 为管理端演示入口：测试码无视活动状态，放行并提示）
+    if (activityInfo.value.status !== 'active' && !presetCode) {
       error.value = activityInfo.value.status === 'ended' ? '活动已结束' : '活动未开始'
       return
+    }
+    if (activityInfo.value.status !== 'active' && presetCode) {
+      toast.info('当前活动未在进行中——演示模式：测试抽奖码仍可体验抽奖流程')
     }
   } catch (err) {
     // 加载活动信息失败
